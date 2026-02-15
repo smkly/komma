@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 256 256" fill="none">
+  <!-- Background (optional). Remove this rect if you want transparency -->
+  <rect width="256" height="256" rx="56" fill="#08090E"/>
+
+  <!-- Mark -->
+  <g stroke="#6366F1" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Outer ring -->
+    <circle cx="128" cy="128" r="86"/>
+
+    <!-- "H" stems -->
+    <path d="M98 92V164"/>
+    <path d="M158 92V164"/>
+
+    <!-- Tiller-like crossbar -->
+    <path d="M94 128H162"/>
+
+    <!-- Handle cues (kept chunky for 16px legibility) -->
+    <path d="M78 128H84"/>
+    <path d="M172 128H178"/>
+
+    <!-- Subtle caret notch (text/cursor energy) -->
+    <path d="M128 116L128 140"/>
+  </g>
+
+  <!-- Soft glow (optional). Delete this group if you want pure flat monochrome -->
+  <g opacity="0.28" filter="url(#glow)">
+    <circle cx="128" cy="128" r="86" stroke="#6366F1" stroke-width="14"/>
+  </g>
+
+  <defs>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+</svg>

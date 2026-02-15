@@ -3,6 +3,7 @@ export {};
 declare global {
   interface Window {
     electronAPI?: {
+      onMenuAction(callback: (action: string, ...args: unknown[]) => void): () => void;
       claude: {
         sendEdit(prompt: string, filePath: string, model?: string): Promise<void>;
         sendChat(

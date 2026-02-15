@@ -75,7 +75,7 @@ export default function OutputTab({
             {!isStreaming && (streamOutput || showLastOutput) && (
               <button
                 onClick={() => { setStreamOutput(''); setShowLastOutput(false); }}
-                className="text-xs px-2 py-1 rounded hover:bg-gray-200 transition-colors"
+                className="text-xs px-2 py-1 rounded btn-ghost"
                 style={{ color: 'var(--color-ink-faded)' }}
               >
                 Close

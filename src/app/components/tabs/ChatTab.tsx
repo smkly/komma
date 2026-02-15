@@ -15,6 +15,8 @@ interface ChatTabProps {
   onSelectSession: (sessionId: number) => void;
   onSendMessage: (message: string, contextSelection?: string) => void;
   onDeleteSession: (sessionId: number) => void;
+  draft?: string;
+  onDraftChange?: (value: string) => void;
 }
 
 export default function ChatTab({
@@ -29,8 +31,10 @@ export default function ChatTab({
   onSelectSession,
   onSendMessage,
   onDeleteSession,
+  draft,
+  onDraftChange,
 }: ChatTabProps) {
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState(draft || '');
   const [includeContext, setIncludeContext] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -44,6 +48,7 @@ export default function ChatTab({
   // Auto-resize textarea
   const handleInputChange = (value: string) => {
     setInputValue(value);
+    onDraftChange?.(value);
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
       inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + 'px';
@@ -55,6 +60,7 @@ export default function ChatTab({
     if (!msg || isStreaming) return;
     onSendMessage(msg, includeContext && selectedText ? selectedText : undefined);
     setInputValue('');
+    onDraftChange?.('');
     setIncludeContext(false);
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
@@ -331,6 +337,7 @@ export default function ChatTab({
         <button
           onClick={handleSend}
           disabled={!inputValue.trim() || isStreaming}
+          aria-label="Send message"
           className="p-1.5 rounded-lg transition-all flex-shrink-0"
           style={{
             background: inputValue.trim() && !isStreaming ? 'var(--color-accent)' : 'var(--color-border)',

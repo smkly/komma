@@ -2,38 +2,38 @@
 @plugin "@tailwindcss/typography";
 
 /* ═══════════════════════════════════════════
-   LIGHT MODE — "Daylight"
-   Clean, sharp, indigo accent
+   LIGHT MODE — "Cloud"
+   Helm Violet — clean, cool, precise
    ═══════════════════════════════════════════ */
 :root {
-  --color-paper: #f8f9fc;
-  --color-paper-dark: #eef0f5;
-  --color-surface: #ffffff;
-  --color-ink: #151720;
-  --color-ink-muted: #545972;
-  --color-ink-faded: #8b90a5;
+  --color-paper: #FAFAFA;
+  --color-paper-dark: #F0F0F3;
+  --color-surface: #FFFFFF;
+  --color-ink: #1A1A2E;
+  --color-ink-muted: #55556E;
+  --color-ink-faded: #8888A0;
 
-  /* Accent — electric indigo */
-  --color-accent: #6366f1;
-  --color-accent-hover: #4f46e5;
-  --color-accent-light: #eef2ff;
-  --color-accent-subtle: rgba(99, 102, 241, 0.08);
-  --color-accent-glow: rgba(99, 102, 241, 0.15);
-  --color-highlight: #fef3c7;
-  --color-amber: #f59e0b;
+  /* Accent — Helm Violet (darkened for light bg contrast) */
+  --color-accent: #7C6BEB;
+  --color-accent-hover: #6B59DE;
+  --color-accent-light: #F0EDFF;
+  --color-accent-subtle: rgba(139, 123, 245, 0.08);
+  --color-accent-glow: rgba(139, 123, 245, 0.15);
+  --color-highlight: #F0EDFF;
+  --color-amber: #F59E0B;
 
   /* Status */
   --color-success: #10b981;
-  --color-danger: #ef4444;
+  --color-danger: #EF4444;
 
   /* Borders */
-  --color-border: #e2e5ed;
-  --color-border-dark: #c8cdd9;
+  --color-border: #E2E2E8;
+  --color-border-dark: #CCCCD6;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(21, 23, 32, 0.05);
-  --shadow-md: 0 4px 12px rgba(21, 23, 32, 0.08);
-  --shadow-lg: 0 8px 24px rgba(21, 23, 32, 0.12);
+  --shadow-sm: 0 1px 2px rgba(26, 26, 46, 0.05);
+  --shadow-md: 0 4px 12px rgba(26, 26, 46, 0.08);
+  --shadow-lg: 0 8px 24px rgba(26, 26, 46, 0.12);
   --shadow-glow: 0 0 20px var(--color-accent-glow);
 
   /* Vim mode bar */
@@ -41,6 +41,10 @@
   --color-vim-normal-fg: var(--color-ink-faded);
   --color-vim-insert-bg: var(--color-accent);
   --color-vim-insert-fg: #ffffff;
+  --color-vim-operator-bg: #D97706;
+  --color-vim-operator-fg: #FFFFFF;
+  --color-vim-visual-bg: #7C3AED;
+  --color-vim-visual-fg: #FFFFFF;
 
   --font-serif: var(--font-serif);
   --font-sans: var(--font-sans);
@@ -48,45 +52,49 @@
 }
 
 /* ═══════════════════════════════════════════
-   DARK MODE — "Midnight"
-   Deep charcoal, electric cyan accent
+   DARK MODE — "Linear"
+   Neutral dark grays, restrained violet accent
    ═══════════════════════════════════════════ */
 [data-theme="dark"] {
-  --color-paper: #0b0d14;
-  --color-paper-dark: #12151e;
-  --color-surface: #181b28;
-  --color-ink: #e4e7f0;
-  --color-ink-muted: #8b92a8;
-  --color-ink-faded: #636b88;
+  --color-paper: #131316;
+  --color-paper-dark: #1A1A1E;
+  --color-surface: #212126;
+  --color-ink: #EEEEF0;
+  --color-ink-muted: #8C8C96;
+  --color-ink-faded: #5C5C66;
 
-  /* Accent — electric cyan */
-  --color-accent: #22d3ee;
-  --color-accent-hover: #06b6d4;
-  --color-accent-light: #0e3640;
-  --color-accent-subtle: rgba(34, 211, 238, 0.06);
-  --color-accent-glow: rgba(34, 211, 238, 0.2);
-  --color-highlight: #422006;
-  --color-amber: #f59e0b;
+  /* Accent — Helm Violet (restrained, only on interactive) */
+  --color-accent: #8B7BF5;
+  --color-accent-hover: #A496FF;
+  --color-accent-light: #25223A;
+  --color-accent-subtle: rgba(139, 123, 245, 0.10);
+  --color-accent-glow: rgba(139, 123, 245, 0.15);
+  --color-highlight: #25223A;
+  --color-amber: #F5A623;
 
   /* Status */
   --color-success: #34d399;
-  --color-danger: #f87171;
+  --color-danger: #F87171;
 
-  /* Borders */
-  --color-border: #1e2231;
-  --color-border-dark: #2a3045;
+  /* Borders — barely visible, like Linear */
+  --color-border: #2A2A2E;
+  --color-border-dark: #353539;
 
-  /* Shadows */
+  /* Shadows — subtle, no colored glow */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 30px var(--color-accent-glow);
+  --shadow-glow: 0 0 20px rgba(0, 0, 0, 0.4);
 
   /* Vim mode bar */
-  --color-vim-normal-bg: #12151e;
-  --color-vim-normal-fg: #4f5672;
-  --color-vim-insert-bg: #0e7490;
-  --color-vim-insert-fg: #e0f7fa;
+  --color-vim-normal-bg: #1A1A1E;
+  --color-vim-normal-fg: #5C5C66;
+  --color-vim-insert-bg: #6B59DE;
+  --color-vim-insert-fg: #F0EDFF;
+  --color-vim-operator-bg: #B45309;
+  --color-vim-operator-fg: #FEF3C7;
+  --color-vim-visual-bg: #6D28D9;
+  --color-vim-visual-fg: #EDE9FE;
 }
 
 @theme inline {
@@ -113,9 +121,7 @@ body {
     radial-gradient(ellipse at 50% 0%, rgba(255, 253, 248, 0.5) 0%, transparent 60%);
 }
 [data-theme="dark"] .paper-texture {
-  background-image:
-    radial-gradient(ellipse at 30% -10%, rgba(34, 211, 238, 0.04) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 110%, rgba(99, 102, 241, 0.03) 0%, transparent 50%);
+  background-image: none;
 }
 
 /* Bug 1 fix: Ensure all prose content is selectable */
@@ -184,9 +190,17 @@ body {
   background-clip: text;
 }
 [data-theme="dark"] .prose-editorial h1 {
-  background: linear-gradient(135deg, #ffffff 0%, var(--color-ink) 100%);
+  background: linear-gradient(135deg, #FFFFFF 0%, #B0B0B8 100%);
   -webkit-background-clip: text;
   background-clip: text;
+}
+.prose-editorial h1::selection {
+  -webkit-text-fill-color: white;
+  background: var(--color-accent);
+}
+[data-theme="dark"] .prose-editorial h1::selection {
+  -webkit-text-fill-color: #0A0A0F;
+  background: var(--color-accent);
 }
 
 .prose-editorial h2 {
@@ -309,7 +323,7 @@ body {
   border: 1px solid rgba(255,255,255,0.05);
 }
 [data-theme="dark"] .prose-editorial pre {
-  background: #080a10;
+  background: #18181C;
   border: 1px solid var(--color-border);
 }
 
@@ -536,7 +550,7 @@ body {
   box-shadow: var(--shadow-sm), 0 0 12px var(--color-accent-glow);
 }
 [data-theme="dark"] .btn-primary {
-  color: #0d0f16;
+  color: #131316;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -654,32 +668,20 @@ body {
   outline-color: rgba(251, 146, 60, 0.6);
 }
 
-.vim-block-cursor {
-  position: relative;
-  border-left: 2px solid var(--color-accent) !important;
-  padding-left: 14px !important;
-  background: var(--color-accent-subtle) !important;
-  border-radius: 0 6px 6px 0;
-  transition: all 0.15s ease;
-  box-shadow: inset 3px 0 12px -4px var(--color-accent-glow);
-}
-.vim-block-cursor::before {
-  content: '';
-  position: absolute;
-  left: -2px;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--color-accent);
-  border-radius: 1px 0 0 1px;
-  box-shadow: 0 0 8px var(--color-accent-glow);
-}
+/* Block cursor — invisible; word underline is enough */
+.vim-block-cursor {}
+
+/* Visual selection — subtle highlight for selected blocks */
 .vim-block-selected {
-  position: relative;
-  border-left: 2px solid var(--color-accent) !important;
-  padding-left: 14px !important;
   background: var(--color-accent-subtle) !important;
-  border-radius: 0 6px 6px 0;
-  opacity: 0.6;
-  transition: all 0.15s ease;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+
+/* Word-level cursor — underline */
+.vim-word-cursor {
+  background: var(--color-accent);
+  pointer-events: none;
+  z-index: 10;
+  border-radius: 1px;
 }

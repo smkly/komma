@@ -29,14 +29,17 @@ export function useChat(documentPath: string, model?: string) {
   const streamRef = useRef<HTMLDivElement>(null);
 
   const loadSessions = useCallback(async (docPath: string) => {
-    try {
-      const res = await fetch(`/api/chat?document_path=${encodeURIComponent(docPath)}`);
-      const data = await res.json();
-      if (data.sessions) {
-        setSessions(data.sessions);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(`/api/chat?document_path=${encodeURIComponent(docPath)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.sessions) setSessions(data.sessions);
+          return;
+        }
+      } catch {
+        if (attempt < 2) await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
       }
-    } catch (error) {
-      console.error('Failed to load chat sessions:', error);
     }
   }, []);
 

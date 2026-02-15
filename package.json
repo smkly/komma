@@ -16,6 +16,7 @@
   "dependencies": {
     "@floating-ui/dom": "^1.7.5",
     "@tailwindcss/typography": "^0.5.19",
+    "@tiptap/extension-bubble-menu": "^3.19.0",
     "@tiptap/extension-link": "^3.17.0",
     "@tiptap/extension-placeholder": "^3.17.0",
     "@tiptap/extension-table": "^3.17.0",

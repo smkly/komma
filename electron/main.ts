@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -92,6 +92,25 @@ async function startNextServer(port: number): Promise<void> {
   });
 
   await waitForServer(`http://localhost:${port}`);
+
+  // In dev mode, warm up API routes so the page doesn't hit cold compilation
+  if (!app.isPackaged) {
+    console.log('Warming up API routes...');
+    const warmupUrls = [
+      `http://localhost:${port}/api/file?path=_warmup`,
+      `http://localhost:${port}/api/comments?document_path=_warmup`,
+      `http://localhost:${port}/api/changelogs?document_path=_warmup`,
+      `http://localhost:${port}/api/frontmatter?path=_warmup`,
+      `http://localhost:${port}/api/chat?document_path=_warmup`,
+    ];
+    await Promise.all(warmupUrls.map(url =>
+      new Promise<void>((resolve) => {
+        http.get(url, (res) => { res.resume(); resolve(); })
+            .on('error', () => resolve());
+      })
+    ));
+    console.log('API routes warm.');
+  }
 }
 
 function createWindow(port: number) {
@@ -265,6 +284,157 @@ function registerIpcHandlers() {
   });
 }
 
+function buildAppMenu() {
+  const send = (channel: string, ...args: unknown[]) => {
+    mainWindow?.webContents.send(channel, ...args);
+  };
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'Helm',
+      submenu: [
+        { role: 'about', label: 'About Helm' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Document',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => send('menu:action', 'new-document'),
+        },
+        {
+          label: 'Open File...',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => send('menu:action', 'open-file'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Save',
+          accelerator: 'CmdOrCtrl+S',
+          click: () => send('menu:action', 'save'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Close Tab',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => send('menu:action', 'close-tab'),
+        },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+        { type: 'separator' },
+        {
+          label: 'Find',
+          accelerator: 'CmdOrCtrl+F',
+          click: () => send('menu:action', 'find'),
+        },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Toggle Edit Mode',
+          accelerator: 'CmdOrCtrl+E',
+          click: () => send('menu:action', 'toggle-edit'),
+        },
+        {
+          label: 'Toggle Sidebar',
+          accelerator: 'CmdOrCtrl+Alt+B',
+          click: () => send('menu:action', 'toggle-sidebar'),
+        },
+        {
+          label: 'Toggle Dark Mode',
+          accelerator: 'CmdOrCtrl+Alt+T',
+          click: () => send('menu:action', 'toggle-theme'),
+        },
+        { type: 'separator' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { role: 'resetZoom' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+        { type: 'separator' },
+        { role: 'toggleDevTools' },
+      ],
+    },
+    {
+      label: 'Selection',
+      submenu: [
+        {
+          label: 'Add Comment',
+          accelerator: 'CmdOrCtrl+K',
+          click: () => send('menu:action', 'add-comment'),
+        },
+      ],
+    },
+    {
+      label: 'AI',
+      submenu: [
+        {
+          label: 'Send Comments to Claude',
+          accelerator: 'CmdOrCtrl+Enter',
+          click: () => send('menu:action', 'send-to-claude'),
+        },
+        { type: 'separator' },
+        {
+          label: 'Model: Haiku',
+          click: () => send('menu:action', 'set-model', 'haiku'),
+        },
+        {
+          label: 'Model: Sonnet',
+          click: () => send('menu:action', 'set-model', 'sonnet'),
+        },
+        {
+          label: 'Model: Opus',
+          click: () => send('menu:action', 'set-model', 'opus'),
+        },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { type: 'separator' },
+        {
+          label: 'Next Tab',
+          accelerator: 'Ctrl+Tab',
+          click: () => send('menu:action', 'next-tab'),
+        },
+        {
+          label: 'Previous Tab',
+          accelerator: 'Ctrl+Shift+Tab',
+          click: () => send('menu:action', 'prev-tab'),
+        },
+        { type: 'separator' },
+        { role: 'front' },
+      ],
+    },
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+app.name = 'Helm';
+
 app.whenReady().then(async () => {
   try {
     serverPort = await findFreePort();
@@ -273,6 +443,7 @@ app.whenReady().then(async () => {
     console.log('Next.js server ready.');
 
     registerIpcHandlers();
+    buildAppMenu();
     createWindow(serverPort);
 
   } catch (err) {

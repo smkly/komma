@@ -261,7 +261,7 @@ export default function CommentDrawer({
           </div>
           <button
             onClick={onCancel}
-            className="w-8 h-8 rounded-md flex items-center justify-center transition-colors hover:bg-gray-100"
+            className="w-8 h-8 rounded-md flex items-center justify-center btn-ghost"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-muted)" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -420,7 +420,7 @@ Type @ to reference docs or MCP tools"
           <div className="flex gap-2">
             <button
               onClick={onCancel}
-              className="px-3 py-1.5 text-sm rounded-md transition-colors hover:bg-gray-100"
+              className="px-3 py-1.5 text-sm rounded-md btn-ghost"
               style={{ color: 'var(--color-ink-muted)' }}
             >
               Cancel

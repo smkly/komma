@@ -1,8 +1,6 @@
 'use client';
 
 interface HeaderProps {
-  filePath: string;
-  setFilePath: (path: string) => void;
   isEditMode: boolean;
   isSaving: boolean;
   loadDocument: () => void;
@@ -16,8 +14,6 @@ interface HeaderProps {
 }
 
 export default function Header({
-  filePath,
-  setFilePath,
   isEditMode,
   isSaving,
   loadDocument,
@@ -40,15 +36,11 @@ export default function Header({
       <div className="px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2.5">
-            <div
-              className="w-7 h-7 rounded-md flex items-center justify-center"
-              style={{ background: 'var(--color-accent)' }}
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
-            </div>
+            <img
+              src={theme === 'dark' ? '/logo-dark.svg' : '/logo-light.svg'}
+              alt="Helm"
+              className="w-7 h-7 rounded-md"
+            />
             <h1
               className="text-sm font-semibold tracking-tight"
               style={{ color: 'var(--color-ink)', fontFamily: 'var(--font-sans)' }}
@@ -56,7 +48,6 @@ export default function Header({
               Helm
             </h1>
           </div>
-          <div className="h-4 w-px" style={{ background: 'var(--color-border)' }} />
           <div className="flex items-center gap-1">
             <button
               onClick={onNewDocument}
@@ -77,18 +68,6 @@ export default function Header({
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
               </svg>
             </button>
-            <input
-              type="text"
-              value={filePath}
-              onChange={(e) => setFilePath(e.target.value)}
-              onBlur={loadDocument}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  loadDocument();
-                }
-              }}
-              className="input input-mono text-xs w-96"
-            />
           </div>
         </div>
         <div className="flex items-center gap-1.5">

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 256 256" fill="none">
+  <!-- Background (optional). Remove this rect if you want transparency -->
+  <rect width="256" height="256" rx="56" fill="#FAFBFE"/>
+
+  <!-- Mark -->
+  <g stroke="#5558E6" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Outer ring -->
+    <circle cx="128" cy="128" r="86"/>
+
+    <!-- "H" stems -->
+    <path d="M98 92V164"/>
+    <path d="M158 92V164"/>
+
+    <!-- Tiller-like crossbar -->
+    <path d="M94 128H162"/>
+
+    <!-- Handle cues -->
+    <path d="M78 128H84"/>
+    <path d="M172 128H178"/>
+
+    <!-- Caret notch -->
+    <path d="M128 116L128 140"/>
+  </g>
+</svg>

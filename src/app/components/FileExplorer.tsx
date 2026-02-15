@@ -245,7 +245,7 @@ function FileTreeItem({
         color: isMarkdown ? 'var(--color-ink)' : 'var(--color-ink-faded)',
         opacity: isMarkdown ? 1 : 0.5,
         userSelect: 'none',
-        background: isActive ? 'var(--color-accent-subtle)' : 'transparent',
+        background: isActive ? 'var(--color-highlight)' : 'transparent',
         borderLeft: isActive ? '2px solid var(--color-accent)' : '2px solid transparent',
       }}
       onMouseEnter={e => { if (isMarkdown && !isActive) e.currentTarget.style.background = 'var(--color-accent-subtle)'; }}

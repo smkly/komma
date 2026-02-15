@@ -4,6 +4,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getPathForFile(file: File): string {
     return webUtils.getPathForFile(file);
   },
+  onMenuAction(callback: (action: string, ...args: unknown[]) => void): () => void {
+    const handler = (_event: Electron.IpcRendererEvent, action: string, ...args: unknown[]) => {
+      callback(action, ...args);
+    };
+    ipcRenderer.on('menu:action', handler);
+    return () => ipcRenderer.removeListener('menu:action', handler);
+  },
   claude: {
     sendEdit(prompt: string, filePath: string, model?: string): Promise<void> {
       return ipcRenderer.invoke('claude:send-edit', prompt, filePath, model);

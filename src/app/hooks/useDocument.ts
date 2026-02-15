@@ -7,8 +7,8 @@ import { Comment, ChangelogEntry } from '../types';
 import type { ParsedFrontmatter } from '@/lib/documents';
 
 export function useDocument() {
-  const [filePath, setFilePath] = useState('/Users/sheldon/Developer/torque/planning/PRODUCT_FEATURES.md');
-  const [markdown, setMarkdown] = useState<string>('');
+  const [filePath, setFilePath] = useState('/Users/sheldon/Developer/torque/vault/PRODUCT_FEATURES.md');
+  const [markdown, setMarkdownState] = useState<string>('');
   const [editedMarkdown, setEditedMarkdown] = useState<string>('');
   const [editedHtml, setEditedHtml] = useState<string>('');
   const [isEditMode, setIsEditMode] = useState(false);
@@ -16,6 +16,14 @@ export function useDocument() {
   const [isSaving, setIsSaving] = useState(false);
   const [frontmatter, setFrontmatter] = useState<ParsedFrontmatter | null>(null);
   const rawFrontmatterRef = useRef<string | null>(null);
+
+  // Ref tracks latest markdown synchronously (for toggleEditMode to read after setMarkdown)
+  const markdownRef = useRef<string>('');
+  markdownRef.current = markdown;
+  const setMarkdown = useCallback((md: string) => {
+    markdownRef.current = md;
+    setMarkdownState(md);
+  }, []);
 
   // Turndown service for HTML to Markdown
   const turndownService = useRef(() => {
@@ -55,12 +63,24 @@ export function useDocument() {
     setMarkdown('');
     let loadedComments: Comment[] = [];
     let loadedChangelogs: ChangelogEntry[] = [];
+    const fetchWithRetry = async (url: string, retries = 5): Promise<Response> => {
+      for (let i = 0; i < retries; i++) {
+        try {
+          const res = await fetch(url);
+          if (res.ok) return res;
+        } catch {
+          if (i === retries - 1) throw new Error(`Failed to fetch ${url}`);
+        }
+        await new Promise(r => setTimeout(r, 1500 * (i + 1)));
+      }
+      throw new Error(`Failed to fetch after ${retries} retries`);
+    };
     try {
       const [fileRes, commentsRes, changelogsRes, frontmatterRes] = await Promise.all([
-        fetch(`/api/file?path=${encodeURIComponent(filePath)}`),
-        fetch(`/api/comments?document_path=${encodeURIComponent(filePath)}`),
-        fetch(`/api/changelogs?document_path=${encodeURIComponent(filePath)}`),
-        fetch(`/api/frontmatter?path=${encodeURIComponent(filePath)}`)
+        fetchWithRetry(`/api/file?path=${encodeURIComponent(filePath)}`),
+        fetchWithRetry(`/api/comments?document_path=${encodeURIComponent(filePath)}`),
+        fetchWithRetry(`/api/changelogs?document_path=${encodeURIComponent(filePath)}`),
+        fetchWithRetry(`/api/frontmatter?path=${encodeURIComponent(filePath)}`)
       ]);
       const data = await fileRes.json();
       setMarkdown(data.content || '');
@@ -101,10 +121,12 @@ export function useDocument() {
   }, [isEditMode, markdown, editedMarkdown]);
 
   // Save edited markdown, preserving frontmatter
-  const saveDocument = async () => {
+  // overrideHtml: pass editor HTML directly to avoid stale state from debounced updates
+  const saveDocument = async (overrideHtml?: string) => {
     setIsSaving(true);
     try {
-      let contentToSave = turndownService.current().turndown(editedHtml);
+      const html = overrideHtml || editedHtml;
+      let contentToSave = turndownService.current().turndown(html);
 
       // Re-prepend original frontmatter if it existed
       if (rawFrontmatterRef.current) {
@@ -128,8 +150,8 @@ export function useDocument() {
 
   const toggleEditMode = () => {
     if (!isEditMode) {
-      // Strip frontmatter — it's preserved in rawFrontmatterRef for re-prepending on save
-      let bodyMd = markdown;
+      // Read from ref (not state) so callers can setMarkdown + toggleEditMode in same tick
+      let bodyMd = markdownRef.current;
       if (rawFrontmatterRef.current && bodyMd.startsWith(rawFrontmatterRef.current)) {
         bodyMd = bodyMd.slice(rawFrontmatterRef.current.length);
       }

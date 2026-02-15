@@ -12,6 +12,7 @@ import { useComments } from './hooks/useComments';
 import { useChangelog } from './hooks/useChangelog';
 import { useClaude } from './hooks/useClaude';
 import { useChat } from './hooks/useChat';
+import { useVim } from './hooks/useVim';
 
 import Header from './components/Header';
 import TabBar from './components/TabBar';
@@ -34,6 +35,17 @@ export default function Home() {
   const doc = useDocument();
   const { comments, setComments, addComment, removeComment, patchComments, markApplied } = useComments(doc.filePath);
   const changelog = useChangelog();
+
+  // TipTap editor ref (exposed by RichEditor via onEditorReady callback)
+  const editorRef = useRef<any>(null);
+
+  // Thin wrappers for edit mode changes (used in place of doc.* for consistency)
+  const toggleEditMode = useCallback(() => doc.toggleEditMode(), [doc.toggleEditMode]);
+  const saveDocument = useCallback(() => {
+    const html = editorRef.current?.getHTML();
+    doc.saveDocument(html);
+  }, [doc.saveDocument]);
+  const setIsEditMode = useCallback((mode: boolean) => doc.setIsEditMode(mode), [doc.setIsEditMode]);
 
   const [activeTab, setActiveTab] = useState<'comments' | 'output' | 'chat'>('comments');
   const [showFileBrowser, setShowFileBrowser] = useState(false);
@@ -90,14 +102,7 @@ export default function Home() {
   const [currentSearchMatch, setCurrentSearchMatch] = useState(0);
   const searchMarksRef = useRef<HTMLElement[]>([]);
 
-  // Vim cursor state — tracks which block element is "focused" in normal mode
-  const [vimCursorIndex, setVimCursorIndex] = useState(0);
-  const vimCursorIndexRef = useRef(0);
-  vimCursorIndexRef.current = vimCursorIndex;
-  const [vimSelectionAnchor, setVimSelectionAnchor] = useState<number | null>(null);
-  const vimSelectionAnchorRef = useRef<number | null>(null);
-  vimSelectionAnchorRef.current = vimSelectionAnchor;
-  const lastGRef = useRef(0); // for gg detection
+  const editorBlockRef = useRef(0); // tracks cursor block inside RichEditor
 
   // Get navigable block elements from the article
   const getBlocks = useCallback((): HTMLElement[] => {
@@ -110,48 +115,37 @@ export default function Home() {
     )) as HTMLElement[];
   }, []);
 
-  // Move vim cursor and scroll into view
-  const moveVimCursor = useCallback((delta: number) => {
-    setVimCursorIndex(prev => {
-      const blocks = getBlocks();
-      if (blocks.length === 0) return 0;
-      const next = Math.max(0, Math.min(blocks.length - 1, prev + delta));
-      blocks[next]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      return next;
-    });
-  }, [getBlocks]);
+  // Vim mode — all vim logic lives in useVim
+  const vim = useVim({
+    mainRef,
+    getBlocks,
+    editorRef,
+    isEditMode: doc.isEditMode,
+    toggleEditMode,
+    saveDocument,
+    markdown: doc.markdown,
+    setMarkdown: doc.setMarkdown,
+    filePath: doc.filePath,
+    openSearch: () => setShowSearch(true),
+  });
 
-  const moveVimCursorTo = useCallback((pos: 'start' | 'end') => {
-    const blocks = getBlocks();
-    if (blocks.length === 0) return;
-    const idx = pos === 'start' ? 0 : blocks.length - 1;
-    setVimCursorIndex(idx);
-    blocks[idx]?.scrollIntoView({ behavior: 'smooth', block: pos === 'start' ? 'start' : 'end' });
-  }, [getBlocks]);
-
-  // Reset cursor when document changes
-  useEffect(() => { setVimCursorIndex(0); }, [doc.filePath]);
-
-  // Apply/remove cursor highlight class on active block(s)
+  // When exiting edit mode, update vim cursor to match where user was editing
+  const prevEditMode = useRef(doc.isEditMode);
   useEffect(() => {
-    if (doc.isEditMode) return;
-    const blocks = getBlocks();
-    // Clean up all
-    blocks.forEach(b => { b.classList.remove('vim-block-cursor'); b.classList.remove('vim-block-selected'); });
-    if (vimSelectionAnchor !== null) {
-      // Range selection: highlight from anchor to cursor
-      const lo = Math.min(vimSelectionAnchor, vimCursorIndex);
-      const hi = Math.max(vimSelectionAnchor, vimCursorIndex);
-      for (let i = lo; i <= hi; i++) {
-        if (blocks[i]) {
-          blocks[i].classList.add(i === vimCursorIndex ? 'vim-block-cursor' : 'vim-block-selected');
-        }
-      }
-    } else if (blocks[vimCursorIndex]) {
-      blocks[vimCursorIndex].classList.add('vim-block-cursor');
+    if (prevEditMode.current && !doc.isEditMode) {
+      const idx = editorBlockRef.current;
+      vim.setBlockIndex(idx);
+      vim.setWordIndex(0);
+      vim.exitInsertMode();
+      requestAnimationFrame(() => {
+        const blocks = getBlocks();
+        blocks[idx]?.scrollIntoView({ block: 'nearest' });
+      });
     }
-    return () => { blocks.forEach(b => { b.classList.remove('vim-block-cursor'); b.classList.remove('vim-block-selected'); }); };
-  }, [vimCursorIndex, vimSelectionAnchor, doc.isEditMode, doc.markdown, getBlocks]);
+    prevEditMode.current = doc.isEditMode;
+  }, [doc.isEditMode, getBlocks]);
+
+  // Block cursor and word cursor effects are now handled inside useVim
 
   // Search: highlight matches in the article DOM
   useEffect(() => {
@@ -348,6 +342,7 @@ export default function Home() {
   });
 
   const chat = useChat(doc.filePath, claude.model);
+  const [chatDraft, setChatDraft] = useState('');
 
   // Initial load
   useEffect(() => {
@@ -410,8 +405,8 @@ export default function Home() {
         } else {
           // No mouse selection — use vim cursor block(s)
           const blocks = getBlocks();
-          const anchor = vimSelectionAnchorRef.current;
-          const cursor = vimCursorIndexRef.current;
+          const anchor = vim.selectionAnchor;
+          const cursor = vim.blockIndex;
           const lo = anchor !== null ? Math.min(anchor, cursor) : cursor;
           const hi = anchor !== null ? Math.max(anchor, cursor) : cursor;
           const selectedBlocks = blocks.slice(lo, hi + 1);
@@ -446,8 +441,8 @@ export default function Home() {
         setShowSearch(true);
       }
 
-      // Cmd+B: toggle file explorer (left panel)
-      if (e.metaKey && !e.altKey && e.key === 'b') {
+      // Cmd+B: toggle file explorer (left panel) — skip in edit mode so TipTap can handle Bold
+      if (e.metaKey && !e.altKey && e.key === 'b' && !doc.isEditMode) {
         e.preventDefault();
         setShowFileExplorer(prev => !prev);
       }
@@ -461,7 +456,7 @@ export default function Home() {
       // Cmd+E: toggle edit mode
       if (e.metaKey && e.key === 'e') {
         e.preventDefault();
-        doc.toggleEditMode();
+        toggleEditMode();
       }
 
       // Cmd+Enter: send comments to Claude (when on comments tab with pending comments, not in comment drawer)
@@ -499,90 +494,7 @@ export default function Home() {
         handleSelectTab(nextIndex);
       }
 
-      // Enter: enter edit mode at current vim cursor position
-      if (e.key === 'Enter' && !doc.isEditMode && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !(e.target as HTMLElement).isContentEditable) {
-          e.preventDefault();
-          doc.toggleEditMode();
-        }
-      }
-
-      // Vim navigation in normal mode — cursor-based movement
-      if (!doc.isEditMode) {
-        const tag = (e.target as HTMLElement).tagName;
-        const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable;
-        if (!isInput) {
-          // j/k — move cursor one block; Shift+j/k extends selection
-          if ((e.key === 'j' || e.key === 'J') && !e.metaKey && !e.ctrlKey) {
-            e.preventDefault();
-            if (e.shiftKey) {
-              if (vimSelectionAnchorRef.current === null) {
-                setVimSelectionAnchor(vimCursorIndexRef.current);
-              }
-            } else {
-              setVimSelectionAnchor(null);
-            }
-            moveVimCursor(1);
-          }
-          if ((e.key === 'k' || e.key === 'K') && !e.metaKey && !e.ctrlKey) {
-            e.preventDefault();
-            if (e.shiftKey) {
-              if (vimSelectionAnchorRef.current === null) {
-                setVimSelectionAnchor(vimCursorIndexRef.current);
-              }
-            } else {
-              setVimSelectionAnchor(null);
-            }
-            moveVimCursor(-1);
-          }
-          // Ctrl+D / Ctrl+U — half-page jump (~10 blocks)
-          if (e.ctrlKey && e.key === 'd') {
-            e.preventDefault();
-            moveVimCursor(10);
-          }
-          if (e.ctrlKey && e.key === 'u') {
-            e.preventDefault();
-            moveVimCursor(-10);
-          }
-          // Ctrl+F / Ctrl+B — full page jump (~20 blocks)
-          if (e.ctrlKey && e.key === 'f') {
-            e.preventDefault();
-            moveVimCursor(20);
-          }
-          if (e.ctrlKey && e.key === 'b') {
-            e.preventDefault();
-            moveVimCursor(-20);
-          }
-          // G — go to end
-          if (e.key === 'G' && !e.metaKey && !e.ctrlKey) {
-            e.preventDefault();
-            moveVimCursorTo('end');
-          }
-          // gg — go to start (double-g within 300ms)
-          if (e.key === 'g' && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
-            const now = Date.now();
-            if (now - lastGRef.current < 300) {
-              e.preventDefault();
-              moveVimCursorTo('start');
-              lastGRef.current = 0;
-            } else {
-              lastGRef.current = now;
-            }
-          }
-        }
-      }
-
-      // / — vim-style search (normal mode only)
-      if (e.key === '/' && !doc.isEditMode && !e.metaKey && !e.ctrlKey) {
-        const tag = (e.target as HTMLElement).tagName;
-        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !(e.target as HTMLElement).isContentEditable) {
-          e.preventDefault();
-          setShowSearch(true);
-        }
-      }
-
-      // Escape: close overlays, or exit edit mode (vim normal mode)
+      // Escape: close overlays, or exit edit mode, or delegate to vim
       if (e.key === 'Escape') {
         if (showSearch) {
           closeSearch();
@@ -593,16 +505,58 @@ export default function Home() {
         } else if (showCommentInput) {
           cancelComment();
         } else if (doc.isEditMode) {
-          doc.saveDocument(); // vim-style: Escape saves and exits insert mode
+          (document.activeElement as HTMLElement)?.blur();
+          saveDocument();
         } else {
-          setVimSelectionAnchor(null); // clear multi-block selection
+          // Delegate to vim (clears selection/operator-pending)
+          vim.handleKeyDown(e);
         }
+        return;
       }
+
+      // Delegate all non-meta vim keys to useVim
+      vim.handleKeyDown(e);
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [doc.isEditMode, doc.toggleEditMode, doc.saveDocument, activeTabIndex, tabs.length, handleCloseTab, handleSelectTab, activeTab, comments, claude.isSending, claude.sendToClaude, showFileBrowser, showNewDocModal, showCommentInput, showSearch, cancelComment, closeSearch, moveVimCursor, moveVimCursorTo]);
+  }, [doc.isEditMode, toggleEditMode, saveDocument, activeTabIndex, tabs.length, handleCloseTab, handleSelectTab, activeTab, comments, claude.isSending, claude.sendToClaude, showFileBrowser, showNewDocModal, showCommentInput, showSearch, cancelComment, closeSearch, vim.handleKeyDown, vim.selectionAnchor, vim.blockIndex, getBlocks]);
+
+  // Electron menu bar actions
+  useEffect(() => {
+    const api = (window as any).electronAPI;
+    if (!api?.onMenuAction) return;
+    const cleanup = api.onMenuAction((action: string, ...args: unknown[]) => {
+      switch (action) {
+        case 'new-document': setShowNewDocModal(true); break;
+        case 'open-file': setShowFileBrowser(true); break;
+        case 'save': if (doc.isEditMode) saveDocument(); break;
+        case 'close-tab': handleCloseTab(activeTabIndex); break;
+        case 'find': setShowSearch(true); break;
+        case 'toggle-edit': toggleEditMode(); break;
+        case 'toggle-sidebar': setShowAgentTab(prev => !prev); break;
+        case 'toggle-theme': toggleTheme(); break;
+        case 'add-comment': setShowCommentInput(true); break;
+        case 'send-to-claude':
+          if (!claude.isSending && comments.some(c => c.status === 'pending')) {
+            claude.sendToClaude();
+          }
+          break;
+        case 'set-model':
+          if (args[0] && typeof args[0] === 'string') {
+            claude.setModel(args[0] as 'haiku' | 'sonnet' | 'opus');
+          }
+          break;
+        case 'next-tab':
+          setActiveTabIndex(prev => prev < tabs.length - 1 ? prev + 1 : 0);
+          break;
+        case 'prev-tab':
+          setActiveTabIndex(prev => prev > 0 ? prev - 1 : tabs.length - 1);
+          break;
+      }
+    });
+    return cleanup;
+  }, [doc.isEditMode, saveDocument, toggleEditMode, activeTabIndex, tabs.length, handleCloseTab, toggleTheme, claude.isSending, claude.sendToClaude, claude.setModel, comments]);
 
   // Document-level selection handler
   useEffect(() => {
@@ -699,11 +653,12 @@ export default function Home() {
     }
   }, [tabs]);
 
+  const [isCreatingDoc, setIsCreatingDoc] = useState(false);
+
   const handleNewDocument = useCallback(async (filePath: string, prompt: string) => {
     setShowNewDocModal(false);
-    // Open the file in a new tab first (it'll be empty initially)
-    handleSelectFile(filePath);
-    // Send to Claude to write the content
+    setIsCreatingDoc(true);
+    // Send to Claude to write the content — don't open the tab until the file exists
     const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
     if (isElectron) {
       const api = window.electronAPI!;
@@ -713,8 +668,10 @@ export default function Home() {
       const cleanupComplete = api.claude.onComplete(async (data) => {
         cleanupStream();
         cleanupComplete();
+        setIsCreatingDoc(false);
         if (data.success) {
-          await loadDocument();
+          // File now exists — open it in a new tab (this triggers the normal load flow)
+          handleSelectFile(filePath);
         }
       });
       await api.claude.sendEdit(
@@ -722,8 +679,10 @@ export default function Home() {
         filePath,
         claude.model
       );
+    } else {
+      setIsCreatingDoc(false);
     }
-  }, [handleSelectFile, loadDocument, claude.model]);
+  }, [handleSelectFile, claude.model]);
 
   // Navigate to a related document by name (resolves to sibling .md file)
   const navigateToDocument = useCallback((docName: string) => {
@@ -856,14 +815,12 @@ export default function Home() {
       }}
     >
       <Header
-        filePath={doc.filePath}
-        setFilePath={doc.setFilePath}
         isEditMode={doc.isEditMode}
         isSaving={doc.isSaving}
         loadDocument={loadDocument}
-        saveDocument={doc.saveDocument}
-        toggleEditMode={doc.toggleEditMode}
-        setIsEditMode={doc.setIsEditMode}
+        saveDocument={saveDocument}
+        toggleEditMode={toggleEditMode}
+        setIsEditMode={setIsEditMode}
         openFileBrowser={openFileBrowser}
         onNewDocument={() => setShowNewDocModal(true)}
         theme={theme}
@@ -922,7 +879,18 @@ export default function Home() {
               onReplaceAll={searchReplaceAll}
             />
           )}
-          {doc.isLoading ? (
+          {isCreatingDoc ? (
+            <div
+              className="flex flex-col items-center justify-center gap-4 py-20"
+              style={{ color: 'var(--color-ink-faded)' }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" className="animate-spin">
+                <circle cx="12" cy="12" r="10" opacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" />
+              </svg>
+              <span className="text-sm">Creating document with Claude...</span>
+            </div>
+          ) : doc.isLoading ? (
             <div
               className="flex items-center gap-3 animate-pulse-subtle"
               style={{ color: 'var(--color-ink-faded)' }}
@@ -935,19 +903,26 @@ export default function Home() {
             </div>
           ) : (
             <>
+              <DocumentInfo
+                frontmatter={doc.frontmatter}
+                onNavigate={navigateToDocument}
+              />
               <div style={{ display: doc.isEditMode ? 'block' : 'none' }}>
                 <RichEditor
                   content={doc.editedHtml}
-                  onChange={(html) => doc.setEditedHtml(html)}
-                  initialBlockIndex={vimCursorIndex}
+                  onChange={undefined /* HTML read from editorRef on save for perf */}
+                  initialBlockIndex={vim.blockIndex}
+                  initialWordIndex={vim.wordIndex}
                   isVisible={doc.isEditMode}
+                  onCursorBlockChange={(idx) => { editorBlockRef.current = idx; }}
+                  onExit={() => {
+                    (document.activeElement as HTMLElement)?.blur();
+                    saveDocument();
+                  }}
+                  onEditorReady={(editor) => { editorRef.current = editor; }}
                 />
               </div>
               <div style={{ display: doc.isEditMode ? 'none' : 'block' }}>
-                <DocumentInfo
-                  frontmatter={doc.frontmatter}
-                  onNavigate={navigateToDocument}
-                />
                 {claude.beforeMarkdown && claude.afterMarkdown ? (
                   <DiffView
                     before={claude.beforeMarkdown}
@@ -970,20 +945,7 @@ export default function Home() {
                         if (docName) navigateToDocument(docName);
                         return;
                       }
-                      // Click to move vim cursor to the clicked block
-                      const blocks = getBlocks();
-                      const blockMap = new Map<HTMLElement, number>();
-                      for (let i = 0; i < blocks.length; i++) blockMap.set(blocks[i], i);
-                      let el: HTMLElement | null = target;
-                      while (el && el !== e.currentTarget) {
-                        const idx = blockMap.get(el);
-                        if (idx !== undefined) {
-                          setVimCursorIndex(idx);
-                          setVimSelectionAnchor(null);
-                          break;
-                        }
-                        el = el.parentElement;
-                      }
+                      vim.handleArticleClick(e);
                     }}
                   >
                     <ReactMarkdown remarkPlugins={[remarkGfm, remarkFrontmatter]} rehypePlugins={[rehypeRaw]}>
@@ -1056,6 +1018,8 @@ export default function Home() {
               onSelectSession={chat.selectSession}
               onSendMessage={chat.sendMessage}
               onDeleteSession={chat.deleteSession}
+              draft={chatDraft}
+              onDraftChange={setChatDraft}
             />
           )}
         </Sidebar>}
@@ -1092,7 +1056,7 @@ export default function Home() {
         onClose={() => setShowFileBrowser(false)}
       />
 
-      {/* Vim-style mode indicator */}
+      {/* Status bar */}
       <div
         style={{
           position: 'fixed',
@@ -1108,27 +1072,52 @@ export default function Home() {
           fontSize: '11px',
           fontFamily: 'var(--font-mono, ui-monospace, monospace)',
           letterSpacing: '0.05em',
-          background: doc.isEditMode ? 'var(--color-vim-insert-bg)' : 'var(--color-vim-normal-bg)',
-          color: doc.isEditMode ? 'var(--color-vim-insert-fg)' : 'var(--color-vim-normal-fg)',
+          background: vim.enabled
+            ? vim.mode === 'INSERT' ? 'var(--color-vim-insert-bg)'
+              : vim.mode === 'OPERATOR_PENDING' ? 'var(--color-vim-operator-bg, var(--color-vim-normal-bg))'
+              : vim.mode === 'VISUAL' ? 'var(--color-vim-visual-bg, var(--color-vim-normal-bg))'
+              : 'var(--color-vim-normal-bg)'
+            : 'var(--color-vim-normal-bg)',
+          color: vim.enabled
+            ? vim.mode === 'INSERT' ? 'var(--color-vim-insert-fg)'
+              : vim.mode === 'OPERATOR_PENDING' ? 'var(--color-vim-operator-fg, var(--color-vim-normal-fg))'
+              : vim.mode === 'VISUAL' ? 'var(--color-vim-visual-fg, var(--color-vim-normal-fg))'
+              : 'var(--color-vim-normal-fg)'
+            : 'var(--color-vim-normal-fg)',
           zIndex: 50,
           transition: 'background 0.2s, color 0.2s',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ fontWeight: 600 }}>
-            {doc.isEditMode ? '-- INSERT --' : 'NORMAL'}
-          </span>
-          <span style={{ opacity: 0.5 }}>
-            {doc.isEditMode
-              ? 'ESC to save+exit'
-              : '⏎ edit  j/k move  ^d/^u page  gg/G jump  / search  ⌘B files'}
-          </span>
+          {vim.enabled ? (
+            <>
+              <span style={{ fontWeight: 600 }}>{vim.modeLabel}</span>
+              <span style={{ opacity: 0.5 }}>{vim.statusText}</span>
+            </>
+          ) : (
+            <span style={{ opacity: 0.5 }}>
+              {doc.isEditMode ? 'Cmd+E to exit edit' : 'Cmd+E to edit'}
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', opacity: 0.5 }}>
-          {!doc.isEditMode && (
-            <span>Ln {vimCursorIndex + 1}</span>
+          {vim.enabled && vim.mode === 'NORMAL' && (
+            <span>Ln {vim.blockIndex + 1}:{vim.wordIndex + 1}</span>
           )}
           <span>{doc.filePath.split('/').pop()}</span>
+          <span
+            onClick={vim.toggleEnabled}
+            style={{
+              cursor: 'pointer',
+              padding: '0 4px',
+              borderRadius: '2px',
+              background: vim.enabled ? 'var(--color-accent-subtle)' : 'transparent',
+              color: vim.enabled ? 'var(--color-accent)' : 'inherit',
+              opacity: vim.enabled ? 1 : 0.6,
+            }}
+          >
+            {vim.enabled ? 'VIM' : 'vim'}
+          </span>
         </div>
       </div>
 
