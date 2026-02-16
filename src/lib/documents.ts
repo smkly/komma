@@ -4,6 +4,11 @@ import type { Document } from './types';
 export function getOrCreateDocument(filePath: string, title?: string): Document {
   const db = getDb();
 
+  // Skip warmup/invalid paths — don't pollute the documents table
+  if (!filePath.startsWith('/')) {
+    return { id: 0, file_path: filePath, title: null, last_opened_at: '', created_at: '', updated_at: '' } as Document;
+  }
+
   const existing = db.prepare('SELECT * FROM documents WHERE file_path = ?').get(filePath) as Document | undefined;
 
   if (existing) {

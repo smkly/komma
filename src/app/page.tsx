@@ -356,10 +356,24 @@ export default function Home() {
   const chat = useChat(doc.filePath, claude.model);
   const [chatDraft, setChatDraft] = useState('');
 
-  // Initial load
+  // Initial load — wait until path restoration finishes
+  // Also sync tab 0 to the restored path (it was initialized with the default before restore)
+  const hasRestoredRef = useRef(false);
   useEffect(() => {
-    loadDocument();
-  }, [loadDocument]);
+    if (!doc.isRestoringPath) {
+      if (!hasRestoredRef.current) {
+        hasRestoredRef.current = true;
+        // Update tab 0 to match the restored path
+        setTabs(prev => {
+          if (prev.length === 1 && prev[0].path !== doc.filePath) {
+            return [{ path: doc.filePath, title: doc.filePath.split('/').pop() || 'Untitled' }];
+          }
+          return prev;
+        });
+      }
+      loadDocument();
+    }
+  }, [doc.isRestoringPath, loadDocument]);
 
   // Resolve vault root when file path changes
   useEffect(() => {
@@ -672,6 +686,11 @@ export default function Home() {
       switch (action) {
         case 'new-document': setShowNewDocModal(true); break;
         case 'open-file': setShowFileBrowser(true); break;
+        case 'open-path':
+          if (args[0] && typeof args[0] === 'string') {
+            handleSelectFile(args[0] as string);
+          }
+          break;
         case 'save': if (doc.isEditMode) saveDocument(); break;
         case 'close-tab': handleCloseTab(activeTabIndex); break;
         case 'find': setShowSearch(true); break;

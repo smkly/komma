@@ -7,28 +7,42 @@ import { Comment, ChangelogEntry } from '../types';
 import type { ParsedFrontmatter } from '@/lib/documents';
 
 export function useDocument() {
-  const [filePath, setFilePath] = useState('/Users/sheldon/Developer/torque/vault/PRODUCT_FEATURES.md');
+  const DEFAULT_PATH = '/Users/sheldon/Developer/torque/vault/PRODUCT_FEATURES.md';
+  const [filePath, setFilePathState] = useState(DEFAULT_PATH);
   const [markdown, setMarkdownState] = useState<string>('');
   const [editedMarkdown, setEditedMarkdown] = useState<string>('');
   const [editedHtml, setEditedHtml] = useState<string>('');
   const [isEditMode, setIsEditMode] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRestoringPath, setIsRestoringPath] = useState(true);
   const [frontmatter, setFrontmatter] = useState<ParsedFrontmatter | null>(null);
   const rawFrontmatterRef = useRef<string | null>(null);
 
-  // Restore last opened document from SQLite on mount
+  // Track whether an external open (IPC) changed the path before restore finished
+  const externalOpenRef = useRef(false);
+  const setFilePath = useCallback((path: string) => {
+    if (isRestoringPath) {
+      externalOpenRef.current = true;
+    }
+    setFilePathState(path);
+  }, [isRestoringPath]);
+
+  // Restore last document before initial load — blocks loadDocument until resolved
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch('/api/last-document');
         const data = await res.json();
-        if (data.filePath && data.filePath !== filePath) {
-          setFilePath(data.filePath);
+        // Skip restore if an IPC open-path already set the file
+        // Validate path looks like an actual file path (not a warmup artifact)
+        if (data.filePath && !externalOpenRef.current && data.filePath.startsWith('/')) {
+          setFilePathState(data.filePath);
         }
       } catch {
         // DB not ready yet on first launch — use default
       }
+      setIsRestoringPath(false);
     })();
   }, []);
 
@@ -188,6 +202,7 @@ export function useDocument() {
     isEditMode,
     setIsEditMode,
     isLoading,
+    isRestoringPath,
     isSaving,
     frontmatter,
     loadDocument,

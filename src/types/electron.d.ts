@@ -11,6 +11,7 @@ declare global {
   interface Window {
     electronAPI?: {
       onMenuAction(callback: (action: string, ...args: unknown[]) => void): () => void;
+      getPendingFile(): Promise<string | null>;
       vault: {
         resolveRoot(fromPath: string): Promise<string | null>;
         getIndex(fromPath: string): Promise<{

@@ -11,6 +11,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('menu:action', handler);
     return () => ipcRenderer.removeListener('menu:action', handler);
   },
+  getPendingFile(): Promise<string | null> {
+    return ipcRenderer.invoke('app:get-pending-file');
+  },
   vault: {
     resolveRoot(fromPath: string): Promise<string | null> {
       return ipcRenderer.invoke('vault:resolve-root', fromPath);

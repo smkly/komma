@@ -12,6 +12,7 @@ let nextServer: ChildProcess | null = null;
 let currentClaude: ReturnType<typeof spawnClaude> | null = null;
 let serverPort: number | null = null;
 let accumulatedStreamText = '';
+let pendingOpenFile: string | null = process.env.HELM_OPEN_FILE || null;
 
 function findFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -243,6 +244,13 @@ function resolveRefsToContext(
 }
 
 function registerIpcHandlers() {
+  // Renderer calls this on mount to get any file that triggered the app launch
+  ipcMain.handle('app:get-pending-file', () => {
+    const file = pendingOpenFile;
+    pendingOpenFile = null;
+    return file;
+  });
+
   ipcMain.handle(
     'claude:send-edit',
     async (_event, prompt: string, filePath: string, model?: string, refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean }) => {
@@ -572,6 +580,8 @@ function buildAppMenu() {
 
 app.name = 'Helm';
 
+const PENDING_FILE = '/tmp/helm-open-file';
+
 app.whenReady().then(async () => {
   // Set dock icon in dev mode (production uses the bundled icon)
   if (!app.isPackaged && process.platform === 'darwin') {
@@ -593,9 +603,37 @@ app.whenReady().then(async () => {
     buildAppMenu();
     createWindow(serverPort);
 
+    // Watch for file-open requests from the AppleScript wrapper
+    // (handles the case when Electron is already running and user double-clicks a .md)
+    const consumePendingFile = () => {
+      try {
+        if (fs.existsSync(PENDING_FILE)) {
+          const openPath = fs.readFileSync(PENDING_FILE, 'utf-8').trim();
+          fs.unlinkSync(PENDING_FILE);
+          if (openPath && mainWindow) {
+            mainWindow.webContents.send('menu:action', 'open-path', openPath);
+          }
+        }
+      } catch { /* ignore race */ }
+    };
+
+    // Poll for the temp file — fs.watch on /tmp is unreliable on macOS
+    // (symlink to /private/tmp breaks it). 200ms polling is fast enough to feel instant.
+    setInterval(consumePendingFile, 200);
+
   } catch (err) {
     console.error('Failed to start application:', err);
     app.quit();
+  }
+});
+
+// macOS: handle file open events (double-click .md in Finder)
+app.on('open-file', (event, filePath) => {
+  event.preventDefault();
+  if (mainWindow && serverPort) {
+    mainWindow.webContents.send('menu:action', 'open-path', filePath);
+  } else {
+    pendingOpenFile = filePath;
   }
 });
 
@@ -612,6 +650,7 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
+  try { fs.unwatchFile(PENDING_FILE); } catch { /* noop */ }
   if (nextServer && !nextServer.killed) {
     nextServer.kill('SIGTERM');
   }
