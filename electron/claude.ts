@@ -127,6 +127,7 @@ export function spawnClaude(
 
   proc.stderr?.on('data', (chunk: Buffer) => {
     const text = chunk.toString();
+    console.error('[claude stderr]', text);
     if (errorCallback) {
       errorCallback(text);
     } else {
@@ -143,6 +144,7 @@ export function spawnClaude(
   });
 
   proc.on('close', (code) => {
+    console.log(`[claude] process exited with code ${code}, completeFired=${completeFired}`);
     // Flush remaining buffer
     if (buffer.trim()) {
       try {
