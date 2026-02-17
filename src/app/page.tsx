@@ -717,7 +717,8 @@ export default function Home() {
       }
 
       // Cmd+Enter: send comments to Claude (when on comments tab with pending comments, not in comment drawer)
-      if (e.metaKey && e.key === 'Enter' && !showCommentInput) {
+      // Guard: skip if a comment was just added (prevents keyboard repeat from auto-sending)
+      if (e.metaKey && e.key === 'Enter' && !showCommentInput && Date.now() - lastCommentAddedRef.current > 500) {
         e.preventDefault();
         if (activeTab === 'edits' && comments.filter(c => c.status === 'pending').length > 0 && !claude.isSending) {
           claude.sendToClaude();
@@ -906,7 +907,8 @@ export default function Home() {
 
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('[data-comment-ui]') && !mainRef.current?.contains(target)) {
+      // Don't clear selection when clicking in comment UI, main doc area, or sidebar (preserves chat "Include" context)
+      if (!target.closest('[data-comment-ui]') && !target.closest('[data-sidebar]') && !mainRef.current?.contains(target)) {
         setShowMiniTooltip(false);
         setSelectedText('');
       }
@@ -926,9 +928,11 @@ export default function Home() {
     setShowCommentInput(true);
   };
 
+  const lastCommentAddedRef = useRef(0);
   const handleAddComment = async (commentText: string, refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean }) => {
     if (commentText.trim() && selectedText) {
       await addComment(selectedText, commentText);
+      lastCommentAddedRef.current = Date.now();
       setNewComment('');
       setShowCommentInput(false);
       setShowMiniTooltip(false);

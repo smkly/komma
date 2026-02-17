@@ -107,6 +107,7 @@ export default function Sidebar({
   return (
     <aside
       ref={sidebarRef}
+      data-sidebar
       className="h-full flex-shrink-0 flex flex-col relative"
       style={{
         width: sidebarWidth,

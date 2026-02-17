@@ -77,6 +77,9 @@ export default function CommentDrawer({
     }
 
     if (e.key === 'Enter' && e.metaKey) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.nativeEvent.stopImmediatePropagation();
       handleSubmit();
     }
     if (e.key === 'Escape' && !mentions.showMentions) {
