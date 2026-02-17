@@ -410,7 +410,7 @@ function registerIpcHandlers() {
           fs.writeFileSync(tmpPath, Buffer.from(img.data, 'base64'));
           tempImagePaths.push(tmpPath);
         }
-        promptParts.push(`The user has attached ${images.length} image(s) for you to look at.`);
+        promptParts.push(`The user has attached ${images.length} image(s). Read each image file to view them:\n${tempImagePaths.map(p => `- ${p}`).join('\n')}`);
       }
 
       const useModel = model || 'sonnet';
@@ -419,7 +419,6 @@ function registerIpcHandlers() {
       currentClaude = spawnClaude(fullPrompt, {
         maxTurns: useModel === 'opus' ? undefined : 3,
         model: useModel,
-        files: tempImagePaths.length > 0 ? tempImagePaths : undefined,
       });
 
       currentClaude.onData((text) => {
