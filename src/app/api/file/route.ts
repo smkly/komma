@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile, writeFile } from 'fs/promises';
+import { getOrCreateDocument } from '@/lib/documents';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -11,6 +12,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const content = await readFile(filePath, 'utf-8');
+    // Track this file as the most recently opened document
+    try { getOrCreateDocument(filePath); } catch { /* DB not ready */ }
     return NextResponse.json({ content });
   } catch (error: unknown) {
     // Return empty content for new files that don't exist yet

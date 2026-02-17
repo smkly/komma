@@ -264,10 +264,10 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, []);
 
-  // Update content when prop changes
+  // Update content when prop changes (deferred to avoid flushSync inside lifecycle)
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
-      editor.commands.setContent(content);
+      queueMicrotask(() => editor.commands.setContent(content));
     }
   }, [content, editor]);
 
@@ -301,7 +301,10 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
       const targetBlock = blocks[initialBlockIndex] as HTMLElement | undefined;
       if (targetBlock) {
         try {
-          const wordIdx = initialWordIndex ?? 0;
+          // Special blocks (table, hr, img) — skip word-level positioning, just place cursor at block start
+          const tag = targetBlock.tagName.toLowerCase();
+          const isSpecialBlock = tag === 'table' || tag === 'hr' || tag === 'img' || targetBlock.querySelector('img');
+          const wordIdx = isSpecialBlock ? 0 : (initialWordIndex ?? 0);
           if (wordIdx > 0) {
             const blockWords: { node: Text; startOffset: number; endOffset: number }[] = [];
             const textWalker = document.createTreeWalker(targetBlock, NodeFilter.SHOW_TEXT);
@@ -335,6 +338,12 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
       }
     });
   }, [editor, initialBlockIndex, initialWordIndex, isVisible]);
+
+  // Reset positioning flag when content changes so cursor re-positions on next visibility toggle
+  useEffect(() => {
+    wasVisible.current = false;
+  }, [content]);
+
 
   return (
     <div ref={editorContainerRef}>

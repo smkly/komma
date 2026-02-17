@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Comment } from '../types';
 
 export function useComments(filePath: string) {
   const [comments, setComments] = useState<Comment[]>([]);
+
+  // Clear stale comments immediately on doc switch; loadDocument will repopulate
+  useEffect(() => { setComments([]); }, [filePath]);
 
   const addComment = async (selectedText: string, instruction: string) => {
     const lineHint = selectedText.substring(0, 50) + (selectedText.length > 50 ? '...' : '');

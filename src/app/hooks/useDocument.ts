@@ -7,8 +7,7 @@ import { Comment, ChangelogEntry } from '../types';
 import type { ParsedFrontmatter } from '@/lib/documents';
 
 export function useDocument() {
-  const DEFAULT_PATH = '/Users/sheldon/Developer/torque/vault/PRODUCT_FEATURES.md';
-  const [filePath, setFilePathState] = useState(DEFAULT_PATH);
+  const [filePath, setFilePathState] = useState('');
   const [markdown, setMarkdownState] = useState<string>('');
   const [editedMarkdown, setEditedMarkdown] = useState<string>('');
   const [editedHtml, setEditedHtml] = useState<string>('');
@@ -28,19 +27,19 @@ export function useDocument() {
     setFilePathState(path);
   }, [isRestoringPath]);
 
-  // Restore last document before initial load — blocks loadDocument until resolved
+  // Check for file opened externally (e.g. Finder double-click via IPC)
+  // No auto-restore of last document — app starts with no file open
   useEffect(() => {
     (async () => {
       try {
+        // Only check for pending Finder open (temp file), don't restore last doc
         const res = await fetch('/api/last-document');
         const data = await res.json();
-        // Skip restore if an IPC open-path already set the file
-        // Validate path looks like an actual file path (not a warmup artifact)
-        if (data.filePath && !externalOpenRef.current && data.filePath.startsWith('/')) {
+        if (data.filePath && !externalOpenRef.current && data.filePath.startsWith('/') && data.fromFinder) {
           setFilePathState(data.filePath);
         }
       } catch {
-        // DB not ready yet on first launch — use default
+        // DB not ready yet on first launch
       }
       setIsRestoringPath(false);
     })();
@@ -80,6 +79,24 @@ export function useDocument() {
         return '\n' + result.join('\n') + '\n';
       }
     });
+    // Preserve images — use raw HTML when dimensions are set (to keep width/height from TipTap)
+    service.addRule('img', {
+      filter: 'img',
+      replacement: function(_content, node) {
+        const img = node as HTMLImageElement;
+        const src = img.getAttribute('src') || '';
+        if (!src) return '';
+        const alt = img.alt || '';
+        const width = img.getAttribute('width') || img.style.width;
+        const height = img.getAttribute('height') || img.style.height;
+        if (width || height) {
+          const w = width ? ` width="${width}"` : '';
+          const h = height ? ` height="${height}"` : '';
+          return `\n\n<img src="${src}" alt="${alt}"${w}${h} />\n\n`;
+        }
+        return `![${alt}](${src})`;
+      }
+    });
     return service;
   });
 
@@ -88,6 +105,10 @@ export function useDocument() {
     comments: Comment[];
     changelogs: ChangelogEntry[];
   }> => {
+    if (!filePath) {
+      setIsLoading(false);
+      return { comments: [], changelogs: [] };
+    }
     setIsLoading(true);
     setMarkdown('');
     let loadedComments: Comment[] = [];
@@ -152,9 +173,38 @@ export function useDocument() {
   // Save edited markdown, preserving frontmatter
   // overrideHtml: pass editor HTML directly to avoid stale state from debounced updates
   const saveDocument = async (overrideHtml?: string) => {
+    if (isSaving) return;
     setIsSaving(true);
     try {
-      const html = overrideHtml || editedHtml;
+      let html = overrideHtml || editedHtml;
+
+      // Convert API image URLs back to relative paths before saving
+      const docDir = filePath.substring(0, filePath.lastIndexOf('/'));
+      html = html.replace(/\/api\/image\?path=([^"]+)/g, (_match, encodedPath) => {
+        const absPath = decodeURIComponent(encodedPath);
+        if (absPath.startsWith(docDir + '/')) {
+          return absPath.slice(docDir.length + 1);
+        }
+        return absPath;
+      });
+
+      // Extract data URI images, save as files, replace with relative paths
+      const dataUriPattern = /src="(data:image\/[^;]+;base64,[^"]+)"/g;
+      const matches = [...html.matchAll(dataUriPattern)];
+      for (const match of matches) {
+        try {
+          const res = await fetch('/api/save-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dataUri: match[1], docPath: filePath }),
+          });
+          const data = await res.json();
+          if (data.relative) {
+            html = html.replace(match[1], data.relative);
+          }
+        } catch { /* keep data URI if save fails */ }
+      }
+
       let contentToSave = turndownService.current().turndown(html);
 
       // Re-prepend original frontmatter if it existed
@@ -169,6 +219,8 @@ export function useDocument() {
       });
       if (res.ok) {
         setMarkdown(contentToSave);
+        setEditedHtml('');
+        setEditedMarkdown('');
         setIsEditMode(false);
       }
     } catch (error) {
@@ -185,7 +237,14 @@ export function useDocument() {
         bodyMd = bodyMd.slice(rawFrontmatterRef.current.length);
       }
       setEditedMarkdown(bodyMd);
-      setEditedHtml(marked(bodyMd) as string);
+      // Resolve relative image paths through the API so TipTap can load them
+      let html = marked(bodyMd) as string;
+      const docDir = filePath.substring(0, filePath.lastIndexOf('/'));
+      html = html.replace(/<img\s+([^>]*?)src="([^"]+)"/gi, (_match, before, src) => {
+        if (src.startsWith('http') || src.startsWith('data:') || src.startsWith('/api/')) return _match;
+        return `<img ${before}src="/api/image?path=${encodeURIComponent(docDir + '/' + src)}"`;
+      });
+      setEditedHtml(html);
     }
     setIsEditMode(!isEditMode);
   };

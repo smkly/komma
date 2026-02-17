@@ -14,6 +14,7 @@ interface EditsTabProps {
   setShowMiniTooltip: (show: boolean) => void;
   setTooltipPosition: (pos: { x: number; y: number }) => void;
   sendToClaude: () => void;
+  cancelEdit: () => void;
   removeComment: (id: number) => void;
   approveComment: (id: number) => void;
   onReviseComment: (comment: Comment) => void;
@@ -45,6 +46,7 @@ export default function EditsTab({
   setShowMiniTooltip,
   setTooltipPosition,
   sendToClaude,
+  cancelEdit,
   removeComment,
   approveComment,
   onReviseComment,
@@ -195,23 +197,34 @@ export default function EditsTab({
 
         {pendingComments.length > 0 && (
           <div className="flex items-center gap-2">
-            <button
-              onClick={sendToClaude}
-              disabled={isSending}
-              className="flex-1 btn btn-primary text-sm justify-center"
-            >
-              {isSending ? (
-                <span className="animate-pulse-subtle">Sending...</span>
-              ) : (
-                <>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                  Send
-                </>
-              )}
-            </button>
+            {isSending ? (
+              <button
+                onClick={cancelEdit}
+                className="flex-1 text-sm py-2 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-all"
+                style={{
+                  background: 'var(--color-danger)',
+                  color: '#fff',
+                  border: '1px solid var(--color-danger)',
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="6" width="12" height="12" rx="1" />
+                </svg>
+                Stop
+              </button>
+            ) : (
+              <button
+                onClick={sendToClaude}
+                disabled={isSending}
+                className="flex-1 btn btn-primary text-sm justify-center"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+                Send
+              </button>
+            )}
             <div className="relative">
               <select
                 value={model}
@@ -288,7 +301,7 @@ export default function EditsTab({
                 className="text-xs mb-2 truncate px-2 py-1 rounded"
                 style={{
                   background: 'var(--color-highlight)',
-                  color: 'var(--color-ink-muted)',
+                  color: 'var(--color-ink)',
                   fontFamily: 'var(--font-serif)'
                 }}
                 title={comment.selectedText}

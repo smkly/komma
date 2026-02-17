@@ -15,8 +15,9 @@ interface ChatTabProps {
   selectedText: string;
   onNewSession: () => void;
   onSelectSession: (sessionId: number) => void;
-  onSendMessage: (message: string, contextSelection?: string, refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean }) => void;
+  onSendMessage: (message: string, contextSelection?: string, refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean }, images?: Array<{ data: string; mimeType: string; name: string }>) => void;
   onDeleteSession: (sessionId: number) => void;
+  onCancelChat: () => void;
   draft?: string;
   onDraftChange?: (value: string) => void;
   currentDir?: string;
@@ -37,6 +38,7 @@ export default function ChatTab({
   onSelectSession,
   onSendMessage,
   onDeleteSession,
+  onCancelChat,
   draft,
   onDraftChange,
   currentDir,
@@ -47,10 +49,30 @@ export default function ChatTab({
   const [inputValue, setInputValue] = useState(draft || '');
   const [includeContext, setIncludeContext] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
+  const [attachedImages, setAttachedImages] = useState<Array<{ data: string; mimeType: string; name: string; preview: string }>>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const mentions = useAtMentions({ currentDir, vaultRoot });
+
+  const addImageFiles = (files: FileList | File[]) => {
+    const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    for (const file of imageFiles) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const base64 = dataUrl.split(',')[1];
+        setAttachedImages(prev => [...prev, {
+          data: base64,
+          mimeType: file.type,
+          name: file.name,
+          preview: dataUrl,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Fetch mention items on mount or when currentDir/vaultRoot changes
   useEffect(() => {
@@ -93,10 +115,14 @@ export default function ChatTab({
     const msg = inputValue.trim();
     if (!msg || isStreaming) return;
     const refs = mentions.parseRefs(inputValue);
-    onSendMessage(msg, includeContext && selectedText ? selectedText : undefined, refs);
+    const imgs = attachedImages.length > 0
+      ? attachedImages.map(({ data, mimeType, name }) => ({ data, mimeType, name }))
+      : undefined;
+    onSendMessage(msg, includeContext && selectedText ? selectedText : undefined, refs, imgs);
     setInputValue('');
     onDraftChange?.('');
     setIncludeContext(false);
+    setAttachedImages([]);
     mentions.reset();
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
@@ -263,6 +289,19 @@ export default function ChatTab({
                       &ldquo;{msg.context_selection.substring(0, 80)}{msg.context_selection.length > 80 ? '...' : ''}&rdquo;
                     </div>
                   )}
+                  {msg.images && msg.images.length > 0 && (
+                    <div className="flex gap-1.5 mb-1.5 flex-wrap">
+                      {msg.images.map((src, i) => (
+                        <img
+                          key={i}
+                          src={src}
+                          alt="attached"
+                          className="rounded-md"
+                          style={{ maxWidth: 120, maxHeight: 80, objectFit: 'cover' }}
+                        />
+                      ))}
+                    </div>
+                  )}
                   <div style={{ lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                     {msg.content}
                   </div>
@@ -358,12 +397,54 @@ export default function ChatTab({
         </div>
       )}
 
+      {/* Image previews */}
+      {attachedImages.length > 0 && (
+        <div className="flex gap-2 mb-2 flex-shrink-0 flex-wrap">
+          {attachedImages.map((img, i) => (
+            <div
+              key={i}
+              className="relative rounded-lg overflow-hidden"
+              style={{ border: '1px solid var(--color-border)', width: 60, height: 60 }}
+            >
+              <img src={img.preview} alt={img.name} className="w-full h-full object-cover" />
+              <button
+                onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
+                className="absolute top-0 right-0 p-0.5 rounded-bl-md"
+                style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: '10px', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Input area */}
       <div
+        data-chat-dropzone
         className="flex-shrink-0 relative flex items-end gap-2 p-2 rounded-xl"
         style={{
           background: 'var(--color-surface)',
-          border: '1px solid var(--color-border)',
+          border: isDragOver ? '2px dashed var(--color-accent)' : '1px solid var(--color-border)',
+          transition: 'border 0.15s',
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragOver(false);
+          if (e.dataTransfer.files.length > 0) {
+            addImageFiles(e.dataTransfer.files);
+          }
         }}
       >
         <textarea
@@ -371,7 +452,17 @@ export default function ChatTab({
           value={inputValue}
           onChange={(e) => handleInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask about this document... (type @ for refs)"
+          onPaste={(e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            const imageItems = Array.from(items).filter(item => item.type.startsWith('image/'));
+            if (imageItems.length > 0) {
+              e.preventDefault();
+              const files = imageItems.map(item => item.getAsFile()).filter(Boolean) as File[];
+              addImageFiles(files);
+            }
+          }}
+          placeholder={isDragOver ? 'Drop image here...' : 'Ask about this document... (type @ for refs)'}
           disabled={isStreaming}
           rows={1}
           className="flex-1 resize-none text-sm outline-none"
@@ -383,21 +474,37 @@ export default function ChatTab({
           }}
         />
         <div className="flex flex-col items-center gap-1 flex-shrink-0">
-          <button
-            onClick={handleSend}
-            disabled={!inputValue.trim() || isStreaming}
-            aria-label="Send message"
-            className="p-1.5 rounded-lg transition-all"
-            style={{
-              background: inputValue.trim() && !isStreaming ? 'var(--color-accent)' : 'var(--color-border)',
-              color: inputValue.trim() && !isStreaming ? 'var(--color-vim-insert-fg)' : 'var(--color-ink-faded)',
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="22" y1="2" x2="11" y2="13" />
-              <polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
-          </button>
+          {isStreaming ? (
+            <button
+              onClick={onCancelChat}
+              aria-label="Stop generation"
+              className="p-1.5 rounded-lg transition-all"
+              style={{
+                background: 'var(--color-danger)',
+                color: '#fff',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="1" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!inputValue.trim() || isStreaming}
+              aria-label="Send message"
+              className="p-1.5 rounded-lg transition-all"
+              style={{
+                background: inputValue.trim() && !isStreaming ? 'var(--color-accent)' : 'var(--color-border)',
+                color: inputValue.trim() && !isStreaming ? 'var(--color-vim-insert-fg)' : 'var(--color-ink-faded)',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          )}
           <div className="relative">
             <select
               value={model}

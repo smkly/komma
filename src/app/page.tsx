@@ -26,8 +26,9 @@ import FileBrowser from './components/FileBrowser';
 import NewDocumentModal from './components/NewDocumentModal';
 import DocumentInfo from './components/DocumentInfo';
 import SearchBar from './components/SearchBar';
-import DiffView from './components/DiffView';
+import InlineDiffView from './components/InlineDiffView';
 import FileExplorer from './components/FileExplorer';
+import MultiAgentProgress from './components/MultiAgentProgress';
 
 const RichEditor = dynamic(() => import('./components/RichEditor'), { ssr: false });
 
@@ -43,6 +44,7 @@ export default function Home() {
   const toggleEditMode = useCallback(() => doc.toggleEditMode(), [doc.toggleEditMode]);
   const saveDocument = useCallback(() => {
     const html = editorRef.current?.getHTML();
+    if (!html) { console.warn('saveDocument: editor returned empty HTML, skipping save'); return; }
     doc.saveDocument(html);
   }, [doc.saveDocument]);
   const setIsEditMode = useCallback((mode: boolean) => doc.setIsEditMode(mode), [doc.setIsEditMode]);
@@ -56,6 +58,15 @@ export default function Home() {
   const [showAgentTab, setShowAgentTab] = useState(true);
   const [vaultRoot, setVaultRoot] = useState<string | null>(null);
   const [showSavedFlash, setShowSavedFlash] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsVaultRoot, setSettingsVaultRoot] = useState('');
+
+  // Google Docs share state
+  const [shareStatus, setShareStatus] = useState<'idle' | 'sharing' | 'done' | 'error' | 'confirm'>('idle');
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [existingDocInfo, setExistingDocInfo] = useState<{ url: string; title: string; updatedAt: string } | null>(null);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
 
   // Split pane state
   const [splitTabIndex, setSplitTabIndex] = useState<number | null>(null);
@@ -89,7 +100,7 @@ export default function Home() {
 
   // Document tab state
   const [tabs, setTabs] = useState<{ path: string; title: string }[]>([
-    { path: doc.filePath, title: doc.filePath.split('/').pop() || 'Untitled' }
+    { path: doc.filePath, title: doc.filePath ? (doc.filePath.split('/').pop() || 'Untitled') : 'Welcome' }
   ]);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
 
@@ -101,6 +112,20 @@ export default function Home() {
   const [newComment, setNewComment] = useState('');
 
   const mainRef = useRef<HTMLElement>(null);
+  const scrollPositionMap = useRef<Map<string, number>>(new Map());
+  const perDocCacheRef = useRef<Map<string, {
+    chatActiveSessionId: number | null;
+    chatMessages: any[];
+    chatSessions: any[];
+    chatDraft: string;
+    beforeMarkdown: string | null;
+    afterMarkdown: string | null;
+    claudeOutput: string;
+    streamOutput: string;
+    showLastOutput: boolean;
+    comments: any[];
+    changelogs: any[];
+  }>>(new Map());
   const splitMainRef = useRef<HTMLElement>(null);
   const splitArticleRef = useRef<HTMLElement>(null);
   const resizeRef = useRef<{ startX: number; startRatio: number } | null>(null);
@@ -123,7 +148,7 @@ export default function Home() {
     return Array.from(article.querySelectorAll(
       ':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6, ' +
       ':scope > p, :scope > ul > li, :scope > ol > li, :scope > blockquote, :scope > pre, ' +
-      ':scope > table, :scope > hr, :scope > div'
+      ':scope > table, :scope > hr, :scope > div:not(.ProseMirror-gapcursor)'
     )) as HTMLElement[];
   }, []);
 
@@ -152,17 +177,44 @@ export default function Home() {
     prevSavingRef.current = doc.isSaving;
   }, [doc.isSaving]);
 
-  // When exiting edit mode, update vim cursor to match where user was editing
-  const prevEditMode = useRef(doc.isEditMode);
+  // Auto-dismiss share toast
   useEffect(() => {
-    if (prevEditMode.current && !doc.isEditMode) {
+    if (shareStatus === 'done') {
+      const t = setTimeout(() => { setShareStatus('idle'); setShareUrl(null); setShareMessage(null); }, 8000);
+      return () => clearTimeout(t);
+    }
+    if (shareStatus === 'error') {
+      const t = setTimeout(() => { setShareStatus('idle'); setShareError(null); }, 5000);
+      return () => clearTimeout(t);
+    }
+  }, [shareStatus]);
+
+  // When entering/exiting edit mode, preserve scroll position via fraction
+  const prevEditMode = useRef(doc.isEditMode);
+  const editScrollFraction = useRef(0);
+  useEffect(() => {
+    if (!prevEditMode.current && doc.isEditMode) {
+      // Entering edit mode — save scroll fraction
+      if (mainRef.current) {
+        const { scrollTop, scrollHeight, clientHeight } = mainRef.current;
+        const maxScroll = scrollHeight - clientHeight;
+        editScrollFraction.current = maxScroll > 0 ? scrollTop / maxScroll : 0;
+      }
+    } else if (prevEditMode.current && !doc.isEditMode) {
+      // Exiting edit mode — restore scroll fraction after re-render
+      const fraction = editScrollFraction.current;
       const idx = editorBlockRef.current;
       vim.setBlockIndex(idx);
       vim.setWordIndex(0);
       vim.exitInsertMode();
       requestAnimationFrame(() => {
-        const blocks = getBlocks();
-        blocks[idx]?.scrollIntoView({ block: 'nearest' });
+        requestAnimationFrame(() => {
+          if (mainRef.current) {
+            const { scrollHeight, clientHeight } = mainRef.current;
+            const maxScroll = scrollHeight - clientHeight;
+            mainRef.current.scrollTop = fraction * maxScroll;
+          }
+        });
       });
     }
     prevEditMode.current = doc.isEditMode;
@@ -375,20 +427,65 @@ export default function Home() {
       if (!hasRestoredRef.current) {
         hasRestoredRef.current = true;
         // Update tab 0 to match the restored path
-        setTabs(prev => {
-          if (prev.length === 1 && prev[0].path !== doc.filePath) {
-            return [{ path: doc.filePath, title: doc.filePath.split('/').pop() || 'Untitled' }];
-          }
-          return prev;
-        });
+        if (doc.filePath) {
+          setTabs(prev => {
+            if (prev.length === 1 && prev[0].path !== doc.filePath) {
+              return [{ path: doc.filePath, title: doc.filePath.split('/').pop() || 'Untitled' }];
+            }
+            return prev;
+          });
+        } else {
+          // No file to open — fetch recent files for welcome screen
+          fetch('/api/last-document')
+            .then(r => r.json())
+            .then(data => {
+              if (data.recentFiles?.length) setRecentFiles(data.recentFiles);
+            })
+            .catch(() => {});
+        }
       }
-      loadDocument();
+      if (doc.filePath) {
+        loadDocument();
+      }
     }
   }, [doc.isRestoringPath, loadDocument]);
 
-  // Resolve vault root when file path changes
+  // Restore scroll position and per-document state after document loads
+  const prevLoadingRef = useRef(doc.isLoading);
+  useEffect(() => {
+    if (prevLoadingRef.current && !doc.isLoading) {
+      // Restore scroll
+      const savedScroll = scrollPositionMap.current.get(doc.filePath);
+      if (savedScroll !== undefined) {
+        requestAnimationFrame(() => {
+          if (mainRef.current) {
+            mainRef.current.scrollTop = savedScroll;
+          }
+        });
+      }
+      // Restore per-document state
+      const cached = perDocCacheRef.current.get(doc.filePath);
+      if (cached) {
+        chat.restoreState(cached.chatActiveSessionId, cached.chatMessages, cached.chatSessions);
+        chatDraftRef.current = cached.chatDraft;
+        claude.restoreState(cached.beforeMarkdown, cached.afterMarkdown, cached.claudeOutput, cached.streamOutput, cached.showLastOutput ?? false);
+        setComments(cached.comments);
+        changelog.setChangelogs(cached.changelogs);
+      }
+    }
+    prevLoadingRef.current = doc.isLoading;
+  }, [doc.isLoading, doc.filePath]);
+
+  // Resolve vault root when file path changes — settings-configured root takes priority
   useEffect(() => {
     const resolveVault = async () => {
+      try {
+        const settings = await window.electronAPI?.settings.get();
+        if (settings?.vaultRoot) {
+          setVaultRoot(settings.vaultRoot);
+          return;
+        }
+      } catch { /* fall through */ }
       try {
         const root = await window.electronAPI?.vault.resolveRoot(doc.filePath);
         setVaultRoot(root ?? null);
@@ -414,8 +511,28 @@ export default function Home() {
 
   // Tab handlers
   const handleSelectTab = useCallback((index: number) => {
+    // Save current scroll position
+    if (mainRef.current && tabs[activeTabIndex]) {
+      scrollPositionMap.current.set(tabs[activeTabIndex].path, mainRef.current.scrollTop);
+    }
+    // Save current document state to cache
+    if (tabs[activeTabIndex]) {
+      perDocCacheRef.current.set(tabs[activeTabIndex].path, {
+        chatActiveSessionId: chat.activeSessionId,
+        chatMessages: chat.messages,
+        chatSessions: chat.sessions,
+        chatDraft: chatDraftRef.current,
+        beforeMarkdown: claude.beforeMarkdown,
+        afterMarkdown: claude.afterMarkdown,
+        claudeOutput: claude.claudeOutput,
+        streamOutput: claude.streamOutput,
+        showLastOutput: claude.showLastOutput,
+        comments: comments,
+        changelogs: changelog.changelogs,
+      });
+    }
     setActiveTabIndex(index);
-  }, []);
+  }, [tabs, activeTabIndex, chat.activeSessionId, chat.messages, chat.sessions, claude.beforeMarkdown, claude.afterMarkdown, claude.claudeOutput, claude.streamOutput, claude.showLastOutput, comments, changelog.changelogs]);
 
   const handleCloseTab = useCallback((index: number) => {
     if (tabs.length <= 1) return;
@@ -672,7 +789,6 @@ export default function Home() {
         } else if (showCommentInput) {
           cancelComment();
         } else if (doc.isEditMode) {
-          (document.activeElement as HTMLElement)?.blur();
           saveDocument();
         } else {
           // Delegate to vim (clears selection/operator-pending)
@@ -826,6 +942,73 @@ export default function Home() {
     setShowFileBrowser(true);
   }, []);
 
+  const handleShareToGoogleDocs = useCallback(async (action?: 'new' | 'update') => {
+    const api = window.electronAPI;
+    if (!api?.google) return;
+
+    // If no action specified, check for existing doc first
+    if (!action) {
+      try {
+        const existing = await api.google.checkExisting(doc.filePath);
+        if (existing) {
+          setExistingDocInfo(existing);
+          setShareStatus('confirm');
+          return;
+        }
+      } catch { /* proceed with new */ }
+    }
+
+    setShareStatus('sharing');
+    setExistingDocInfo(null);
+    try {
+      const title = doc.filePath.split('/').pop()?.replace(/\.md$/, '') || 'Untitled';
+      const result = await api.google.shareDoc(doc.markdown, title, doc.filePath, action);
+      if (result.success && result.url) {
+        setShareStatus('done');
+        setShareUrl(result.url);
+      } else {
+        setShareStatus('error');
+        setShareError(result.error || 'Upload failed');
+      }
+    } catch (err: any) {
+      setShareStatus('error');
+      setShareError(err.message || 'Upload failed');
+    }
+  }, [doc.markdown, doc.filePath]);
+
+  const handlePullChanges = useCallback(async () => {
+    const api = window.electronAPI;
+    if (!api?.google?.pullDoc) return;
+
+    setShareStatus('sharing');
+    setExistingDocInfo(null);
+    try {
+      const result = await api.google.pullDoc(doc.filePath);
+
+      if (result.comments.length === 0) {
+        setShareMessage('No new comments');
+        setShareStatus('done');
+        return;
+      }
+
+      // Create Helm comments for each pulled Google comment
+      for (const c of result.comments) {
+        await addComment(c.selectedText, c.comment);
+      }
+
+      // Check if remote content differs
+      let message = `Pulled ${result.comments.length} comment${result.comments.length === 1 ? '' : 's'} from Google Docs`;
+      if (result.remoteText.trim() !== doc.markdown.trim()) {
+        message += ' (remote content differs)';
+      }
+
+      setShareMessage(message);
+      setShareStatus('done');
+    } catch (err: any) {
+      setShareStatus('error');
+      setShareError(err.message || 'Failed to pull comments');
+    }
+  }, [doc.filePath, doc.markdown, addComment]);
 
   const handleSelectFile = useCallback((path: string) => {
     setShowFileBrowser(false);
@@ -843,6 +1026,20 @@ export default function Home() {
   }, [tabs]);
 
   const [isCreatingDoc, setIsCreatingDoc] = useState(false);
+  const [multiAgentSections, setMultiAgentSections] = useState<Array<{ title: string; status: 'pending' | 'streaming' | 'complete' | 'error'; output: string }>>([]);
+  const [isMultiAgent, setIsMultiAgent] = useState(false);
+
+  const parseOutlineSections = useCallback((prompt: string): Array<{ title: string; prompt: string }> | null => {
+    const lines = prompt.split('\n').map(l => l.trim()).filter(Boolean);
+    const sections: Array<{ title: string; prompt: string }> = [];
+    for (const line of lines) {
+      const match = line.match(/^(?:\d+\.\s+|[-*]\s+|#{1,3}\s+)(.+)/);
+      if (match) {
+        sections.push({ title: match[1], prompt: `Write the "${match[1]}" section.` });
+      }
+    }
+    return sections.length >= 3 ? sections : null;
+  }, []);
 
   const handleNewDocument = useCallback(async (filePath: string, prompt: string) => {
     setShowNewDocModal(false);
@@ -855,16 +1052,27 @@ export default function Home() {
         // Could show progress but for now just wait
       });
       const cleanupComplete = api.claude.onComplete(async (data) => {
+        if (data.type !== 'edit') return; // ignore chat completions
         cleanupStream();
         cleanupComplete();
         setIsCreatingDoc(false);
         if (data.success) {
-          // File now exists — open it in a new tab (this triggers the normal load flow)
-          handleSelectFile(filePath);
+          // Verify the file actually got created before opening
+          try {
+            const check = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
+            const checkData = await check.json();
+            if (checkData.content) {
+              handleSelectFile(filePath);
+            } else {
+              console.error('New document file was empty after generation');
+            }
+          } catch {
+            console.error('New document file was not created');
+          }
         }
       });
       await api.claude.sendEdit(
-        `Create the file ${filePath} with the following content based on this description: ${prompt}\n\nWrite comprehensive, well-structured markdown content. Include appropriate headers, sections, and formatting.`,
+        `Use the Write tool to create the file at ${filePath}. The file does not exist yet — do NOT try to Read it first. Just write it directly.\n\n${prompt}\n\nWrite comprehensive, well-structured markdown content. Include appropriate headers, sections, and formatting.`,
         filePath,
         claude.model
       );
@@ -978,10 +1186,13 @@ export default function Home() {
       style={{ background: 'var(--color-paper)' }}
       onDragOver={(e) => {
         e.preventDefault();
+        // Don't show .md overlay if dragging over the chat input area
+        if ((e.target as HTMLElement).closest?.('[data-chat-dropzone]')) return;
         setIsDragOver(true);
       }}
       onDragLeave={(e) => {
-        if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
+        // relatedTarget is null when leaving the window entirely
+        if (!e.relatedTarget || e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) {
           setIsDragOver(false);
         }
       }}
@@ -991,6 +1202,8 @@ export default function Home() {
         setIsDragOver(false);
         const file = e.dataTransfer.files[0];
         if (!file) return;
+        // Only accept markdown files
+        if (!file.name.endsWith('.md') && !file.name.endsWith('.markdown')) return;
         // Use Electron's webUtils.getPathForFile (works with sandbox)
         const api = (window as any).electronAPI;
         const filePath = api?.getPathForFile?.(file) || (file as any).path;
@@ -1014,6 +1227,22 @@ export default function Home() {
         onNewDocument={() => setShowNewDocModal(true)}
         theme={theme}
         onToggleTheme={toggleTheme}
+        shareStatus={shareStatus}
+        shareUrl={shareUrl}
+        shareError={shareError}
+        existingDocInfo={existingDocInfo}
+        onShareToGoogleDocs={handleShareToGoogleDocs}
+        onOpenShareUrl={() => { if (shareUrl) window.electronAPI?.google.openUrl(shareUrl); }}
+        onPullChanges={handlePullChanges}
+        shareMessage={shareMessage}
+        onDismissShare={() => { setShareStatus('idle'); setShareUrl(null); setShareError(null); setExistingDocInfo(null); setShareMessage(null); }}
+        onOpenSettings={async () => {
+          try {
+            const settings = await window.electronAPI?.settings.get();
+            setSettingsVaultRoot(settings?.vaultRoot || '');
+          } catch { setSettingsVaultRoot(''); }
+          setShowSettings(true);
+        }}
       />
 
       <TabBar
@@ -1069,12 +1298,14 @@ export default function Home() {
         {/* Main document area — primary pane */}
         <main
           ref={mainRef}
-          className="py-10 px-16 relative overflow-y-auto"
+          className="py-10 px-8 relative overflow-y-auto"
           style={{
             flex: splitTabIndex !== null ? `0 0 ${splitRatio * 100}%` : '1',
             background: 'var(--color-surface)',
             paddingBottom: '48px',
-            borderTop: splitTabIndex !== null && activePane === 'primary' ? '2px solid var(--color-accent)' : '2px solid transparent',
+            borderTop: splitTabIndex !== null && activePane === 'primary' ? '3px solid var(--color-accent)' : '3px solid transparent',
+            opacity: splitTabIndex !== null && activePane !== 'primary' ? 0.5 : 1,
+            transition: 'opacity 0.15s ease',
             cursor: splitTabIndex !== null ? 'default' : undefined,
           }}
         >
@@ -1087,6 +1318,9 @@ export default function Home() {
             >
               <span className="text-xs font-medium" style={{ color: activePane === 'primary' ? 'var(--color-accent)' : 'var(--color-ink-faded)', fontFamily: 'var(--font-sans)' }}>
                 {primaryTitle}
+                <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, marginLeft: 6, background: activePane === 'primary' ? 'var(--color-accent)' : 'var(--color-border)', color: activePane === 'primary' ? '#fff' : 'var(--color-ink-faded)' }}>
+                  {activePane === 'primary' ? 'Working' : 'Reference'}
+                </span>
               </span>
               <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-paper-dark)', color: 'var(--color-ink-faded)', border: '1px solid var(--color-border)' }}>
                 {activePane === 'primary' ? comments.length : splitPaneCommentCount} comments
@@ -1109,7 +1343,99 @@ export default function Home() {
               onReplaceAll={searchReplaceAll}
             />
           )}
-          {isCreatingDoc ? (
+          <div style={{ maxWidth: '816px', margin: '0 auto', width: '100%' }}>
+          {!doc.filePath && !doc.isRestoringPath ? (
+            <div className="flex flex-col items-center justify-center py-20" style={{ color: 'var(--color-ink-faded)' }}>
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="1.5" style={{ marginBottom: '16px', opacity: 0.6 }}>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14 2 14 8 20 8" />
+                <line x1="16" y1="13" x2="8" y2="13" />
+                <line x1="16" y1="17" x2="8" y2="17" />
+                <polyline points="10 9 9 9 8 9" />
+              </svg>
+              <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--color-ink)', marginBottom: '4px' }}>
+                Helm
+              </div>
+              <div style={{ fontSize: '13px', marginBottom: '24px' }}>
+                Open a file to get started
+              </div>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '32px' }}>
+                <button
+                  onClick={() => setShowFileBrowser(true)}
+                  style={{
+                    padding: '6px 16px',
+                    fontSize: '13px',
+                    background: 'var(--color-accent)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Open File
+                </button>
+                <button
+                  onClick={() => setShowNewDocModal(true)}
+                  style={{
+                    padding: '6px 16px',
+                    fontSize: '13px',
+                    background: 'var(--color-surface-raised)',
+                    color: 'var(--color-ink)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  New Document
+                </button>
+              </div>
+              {recentFiles.length > 0 && (
+                <div style={{ width: '100%', maxWidth: '400px' }}>
+                  <div style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px', opacity: 0.6 }}>
+                    Recent Files
+                  </div>
+                  {recentFiles.map((f) => (
+                    <button
+                      key={f}
+                      onClick={() => handleSelectFile(f)}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '8px 12px',
+                        fontSize: '13px',
+                        background: 'none',
+                        border: 'none',
+                        borderRadius: '6px',
+                        color: 'var(--color-ink)',
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={(e) => { (e.target as HTMLElement).style.background = 'var(--color-surface-raised)'; }}
+                      onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'none'; }}
+                    >
+                      <span style={{ color: 'var(--color-accent)' }}>{f.split('/').pop()}</span>
+                      <span style={{ fontSize: '11px', opacity: 0.5, marginLeft: '8px' }}>
+                        {f.substring(0, f.lastIndexOf('/'))}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : isMultiAgent ? (
+            <MultiAgentProgress
+              sections={multiAgentSections}
+              onCancel={() => {
+                window.electronAPI?.claude.multiCancel();
+                setIsMultiAgent(false);
+                setMultiAgentSections([]);
+              }}
+              onCombine={() => {
+                setIsMultiAgent(false);
+                setMultiAgentSections([]);
+              }}
+            />
+          ) : isCreatingDoc ? (
             <div
               className="flex flex-col items-center justify-center gap-4 py-20"
               style={{ color: 'var(--color-ink-faded)' }}
@@ -1146,22 +1472,24 @@ export default function Home() {
                   isVisible={doc.isEditMode}
                   onCursorBlockChange={(idx) => { editorBlockRef.current = idx; }}
                   onExit={() => {
-                    (document.activeElement as HTMLElement)?.blur();
                     saveDocument();
                   }}
                   onEditorReady={(editor) => { editorRef.current = editor; }}
                 />
               </div>
               <div style={{ display: doc.isEditMode ? 'none' : 'block' }}>
-                {claude.beforeMarkdown && claude.afterMarkdown ? (
-                  <DiffView
-                    before={claude.beforeMarkdown}
-                    after={claude.afterMarkdown}
-                    onApprove={() => {
-                      claude.approveChanges();
+                {claude.beforeMarkdown && claude.afterMarkdown && claude.diffChunks.length > 0 ? (
+                  <InlineDiffView
+                    chunks={claude.diffChunks}
+                    onApproveChunk={claude.approveChunk}
+                    onRejectChunk={claude.rejectChunk}
+                    onApproveAll={claude.approveAllChunks}
+                    onRejectAll={claude.rejectAllChunks}
+                    onFinalize={async () => {
+                      await claude.finalizeChunks();
                       comments.filter(c => c.status === 'applied').forEach(c => removeComment(c.id));
                     }}
-                    onReject={claude.rejectChanges}
+                    stats={claude.diffChunkStats}
                   />
                 ) : (
                   <article
@@ -1178,7 +1506,22 @@ export default function Home() {
                       vim.handleArticleClick(e);
                     }}
                   >
-                    <ReactMarkdown remarkPlugins={[remarkGfm, remarkFrontmatter]} rehypePlugins={[rehypeRaw]}>
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkFrontmatter]}
+                      rehypePlugins={[rehypeRaw]}
+                      components={{
+                        img: ({ src, alt, ...props }) => {
+                          if (!src || typeof src !== 'string') return null;
+                          // Resolve relative paths through the image API
+                          let resolvedSrc = src;
+                          if (!src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('/api/')) {
+                            const docDir = doc.filePath.substring(0, doc.filePath.lastIndexOf('/'));
+                            resolvedSrc = `/api/image?path=${encodeURIComponent(docDir + '/' + src)}`;
+                          }
+                          return <img src={resolvedSrc} alt={alt || ''} {...props} style={{ maxWidth: '100%' }} />;
+                        },
+                      }}
+                    >
                       {processWikiLinks(doc.markdown)}
                     </ReactMarkdown>
                   </article>
@@ -1186,6 +1529,7 @@ export default function Home() {
               </div>
             </>
           )}
+          </div>{/* end centered content wrapper */}
         </main>
 
         {/* Resize handle — only when split */}
@@ -1200,12 +1544,14 @@ export default function Home() {
         {splitTabIndex !== null && (
           <main
             ref={splitMainRef}
-            className="py-10 px-16 relative overflow-y-auto"
+            className="py-10 px-8 relative overflow-y-auto"
             style={{
               flex: `0 0 ${(1 - splitRatio) * 100}%`,
               background: 'var(--color-surface)',
               paddingBottom: '48px',
-              borderTop: activePane === 'split' ? '2px solid var(--color-accent)' : '2px solid transparent',
+              borderTop: activePane === 'split' ? '3px solid var(--color-accent)' : '3px solid transparent',
+              opacity: activePane !== 'split' ? 0.5 : 1,
+              transition: 'opacity 0.15s ease',
               borderLeft: '1px solid var(--color-border)',
             }}
           >
@@ -1217,6 +1563,9 @@ export default function Home() {
             >
               <span className="text-xs font-medium" style={{ color: activePane === 'split' ? 'var(--color-accent)' : 'var(--color-ink-faded)', fontFamily: 'var(--font-sans)' }}>
                 {splitTitle}
+                <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, marginLeft: 6, background: activePane === 'split' ? 'var(--color-accent)' : 'var(--color-border)', color: activePane === 'split' ? '#fff' : 'var(--color-ink-faded)' }}>
+                  {activePane === 'split' ? 'Working' : 'Reference'}
+                </span>
               </span>
               <div className="flex items-center gap-2">
                 <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-paper-dark)', color: 'var(--color-ink-faded)', border: '1px solid var(--color-border)' }}>
@@ -1234,6 +1583,7 @@ export default function Home() {
               </div>
             </div>
 
+            <div style={{ maxWidth: '816px', margin: '0 auto', width: '100%' }}>
             {/* Read-only markdown content */}
             <article
               ref={splitArticleRef}
@@ -1243,6 +1593,7 @@ export default function Home() {
                 {processWikiLinks(splitPaneMarkdown)}
               </ReactMarkdown>
             </article>
+            </div>
           </main>
         )}
 
@@ -1271,6 +1622,7 @@ export default function Home() {
               setShowMiniTooltip={setShowMiniTooltip}
               setTooltipPosition={setTooltipPosition}
               sendToClaude={claude.sendToClaude}
+              cancelEdit={claude.cancelEdit}
               removeComment={removeComment}
               approveComment={(id) => {
                 removeComment(id);
@@ -1309,6 +1661,7 @@ export default function Home() {
               onSelectSession={chat.selectSession}
               onSendMessage={chat.sendMessage}
               onDeleteSession={chat.deleteSession}
+              onCancelChat={chat.cancelChat}
               draft={chatDraftRef.current}
               onDraftChange={(v: string) => { chatDraftRef.current = v; }}
               currentDir={doc.filePath.substring(0, doc.filePath.lastIndexOf('/'))}
@@ -1351,6 +1704,121 @@ export default function Home() {
         onSelectFile={handleSelectFile}
         onClose={() => setShowFileBrowser(false)}
       />
+
+      {/* Settings modal */}
+      {showSettings && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowSettings(false); }}
+          onKeyDown={(e) => { if (e.key === 'Escape') setShowSettings(false); }}
+        >
+          <div
+            style={{
+              background: 'var(--color-surface)',
+              borderRadius: '12px',
+              padding: '24px',
+              width: '480px',
+              maxWidth: '90vw',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+              border: '1px solid var(--color-border)',
+              fontFamily: 'var(--font-sans)',
+            }}
+          >
+            <h2 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 600, color: 'var(--color-ink)' }}>Settings</h2>
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--color-ink)', marginBottom: '6px' }}>
+              Vault Root
+            </label>
+            <p style={{ fontSize: '12px', color: 'var(--color-ink-faded)', margin: '0 0 8px' }}>
+              Directory used for @vault references and document lookup. Leave empty to auto-detect via .vault marker.
+            </p>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+              <input
+                type="text"
+                value={settingsVaultRoot}
+                onChange={(e) => setSettingsVaultRoot(e.target.value)}
+                placeholder="/path/to/vault"
+                style={{
+                  flex: 1,
+                  padding: '8px 12px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-paper)',
+                  color: 'var(--color-ink)',
+                  outline: 'none',
+                  fontFamily: 'var(--font-mono, monospace)',
+                }}
+              />
+              <button
+                onClick={async () => {
+                  const dir = await window.electronAPI?.dialog.openDirectory();
+                  if (dir) setSettingsVaultRoot(dir);
+                }}
+                style={{
+                  padding: '8px 14px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface-raised)',
+                  color: 'var(--color-ink)',
+                  cursor: 'pointer',
+                }}
+              >
+                Browse
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowSettings(false)}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--color-border)',
+                  background: 'var(--color-surface-raised)',
+                  color: 'var(--color-ink)',
+                  cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const trimmed = settingsVaultRoot.trim();
+                  if (trimmed) {
+                    await window.electronAPI?.settings.set('vaultRoot', trimmed);
+                    setVaultRoot(trimmed);
+                  } else {
+                    await window.electronAPI?.settings.set('vaultRoot', '');
+                    // Re-resolve via .vault marker
+                    try {
+                      const root = await window.electronAPI?.vault.resolveRoot(doc.filePath);
+                      setVaultRoot(root ?? null);
+                    } catch { setVaultRoot(null); }
+                  }
+                  setShowSettings(false);
+                }}
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '13px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  background: 'var(--color-accent)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status bar */}
       <div

@@ -191,7 +191,9 @@ export default function ImageNodeView({ node, updateAttributes, deleteNode, sele
     if (!ctx) return;
     ctx.drawImage(img, sx, sy, sw, sh, 0, 0, out.width, out.height);
     const dataUrl = out.toDataURL('image/png');
-    updateAttributes({ src: dataUrl, width: null });
+    // Cap cropped image width to 600px if larger (retina screenshots can be huge)
+    const croppedWidth = out.width > 600 ? 600 : null;
+    updateAttributes({ src: dataUrl, width: croppedWidth });
     setIsCropping(false);
   }, [cropRect, cropCanvasSize, updateAttributes]);
 
@@ -361,10 +363,10 @@ export default function ImageNodeView({ node, updateAttributes, deleteNode, sele
               style={{ cursor: 'crosshair', borderRadius: 8, boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
             />
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="image-crop-btn image-crop-btn-cancel" onClick={() => setIsCropping(false)}>
+              <button className="image-crop-btn image-crop-btn-cancel" onClick={(e) => { e.stopPropagation(); setIsCropping(false); }}>
                 Cancel
               </button>
-              <button className="image-crop-btn image-crop-btn-apply" onClick={applyCrop}>
+              <button className="image-crop-btn image-crop-btn-apply" onClick={(e) => { e.stopPropagation(); applyCrop(); }}>
                 Apply Crop
               </button>
             </div>

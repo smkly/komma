@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -6,10 +6,27 @@ import * as os from 'os';
 import * as http from 'http';
 import * as net from 'net';
 import { spawnClaude } from './claude';
+import { uploadHtmlAsGoogleDoc, updateGoogleDoc, clearTokens, getExistingDoc, fetchDocComments, exportDocAsText, getPulledCommentIds, markCommentsPulled } from './google-auth';
+import { marked } from 'marked';
+
+const SETTINGS_PATH = path.join(os.homedir(), '.helm', 'config.json');
+
+function readSettings(): Record<string, any> {
+  try {
+    return JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf-8'));
+  } catch { return {}; }
+}
+
+function writeSettings(settings: Record<string, any>) {
+  const dir = path.dirname(SETTINGS_PATH);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2));
+}
 
 let mainWindow: BrowserWindow | null = null;
 let nextServer: ChildProcess | null = null;
 let currentClaude: ReturnType<typeof spawnClaude> | null = null;
+let currentClaudeDocPath: string | null = null;
 let serverPort: number | null = null;
 let accumulatedStreamText = '';
 let pendingOpenFile: string | null = process.env.HELM_OPEN_FILE || null;
@@ -142,6 +159,13 @@ function createWindow(port: number) {
 }
 
 function resolveVaultRoot(fromPath: string): string | null {
+  // Settings-configured vault root takes priority
+  const settings = readSettings();
+  if (settings.vaultRoot && fs.existsSync(settings.vaultRoot)) {
+    return settings.vaultRoot;
+  }
+
+  // Fall back to .vault marker detection
   let dir = fromPath;
   // If fromPath is a file, start from its directory
   if (fs.existsSync(dir) && fs.statSync(dir).isFile()) {
@@ -255,9 +279,13 @@ function registerIpcHandlers() {
     'claude:send-edit',
     async (_event, prompt: string, filePath: string, model?: string, refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean }) => {
       if (currentClaude) {
+        if (currentClaudeDocPath && currentClaudeDocPath !== filePath) {
+          throw new Error(`Claude is currently working on ${currentClaudeDocPath.split('/').pop()}. Please wait or cancel first.`);
+        }
         currentClaude.kill();
         currentClaude = null;
       }
+      currentClaudeDocPath = filePath;
 
       const useModel = model || 'sonnet';
       const isFast = useModel !== 'opus';
@@ -268,9 +296,14 @@ function registerIpcHandlers() {
         refContext = resolveRefsToContext(refs, filePath, vaultRoot);
       }
 
+      const fileExists = fs.existsSync(filePath);
       const fullPrompt = isFast
-        ? `Edit the file at ${filePath}. Read it, apply the changes, and stop. Do not explain.\n\n${prompt}${refContext}`
-        : `Edit the file at ${filePath}:\n\n${prompt}${refContext}`;
+        ? (fileExists
+            ? `Edit the file at ${filePath}. Read it, apply the changes, and stop. Do not explain.\n\n${prompt}${refContext}`
+            : `${prompt}${refContext}`)
+        : (fileExists
+            ? `Edit the file at ${filePath}:\n\n${prompt}${refContext}`
+            : `${prompt}${refContext}`);
       accumulatedStreamText = '';
       currentClaude = spawnClaude(fullPrompt, {
         allowedTools: isFast ? ['Read', 'Edit', 'Write'] : undefined,
@@ -293,6 +326,7 @@ function registerIpcHandlers() {
           content: result,
         });
         currentClaude = null;
+        currentClaudeDocPath = null;
       });
 
       currentClaude.onError((error) => {
@@ -302,6 +336,7 @@ function registerIpcHandlers() {
           error,
         });
         currentClaude = null;
+        currentClaudeDocPath = null;
       });
     },
   );
@@ -317,11 +352,16 @@ function registerIpcHandlers() {
       history: Array<{ role: string; content: string }>,
       model?: string,
       refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean },
+      images?: Array<{ data: string; mimeType: string; name: string }>,
     ) => {
       if (currentClaude) {
+        if (currentClaudeDocPath && currentClaudeDocPath !== docPath) {
+          throw new Error(`Claude is currently working on ${currentClaudeDocPath.split('/').pop()}. Please wait or cancel first.`);
+        }
         currentClaude.kill();
         currentClaude = null;
       }
+      currentClaudeDocPath = docPath;
 
       let promptParts: string[] = [];
 
@@ -359,12 +399,27 @@ function registerIpcHandlers() {
         }
       }
 
+      // Save attached images to temp files
+      const tempImagePaths: string[] = [];
+      if (images && images.length > 0) {
+        const tmpDir = path.join(os.tmpdir(), 'helm-chat-images');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        for (const img of images) {
+          const ext = img.mimeType.split('/')[1] || 'png';
+          const tmpPath = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);
+          fs.writeFileSync(tmpPath, Buffer.from(img.data, 'base64'));
+          tempImagePaths.push(tmpPath);
+        }
+        promptParts.push(`The user has attached ${images.length} image(s) for you to look at.`);
+      }
+
       const useModel = model || 'sonnet';
       const fullPrompt = promptParts.join('\n\n---\n\n');
       accumulatedStreamText = '';
       currentClaude = spawnClaude(fullPrompt, {
         maxTurns: useModel === 'opus' ? undefined : 3,
         model: useModel,
+        files: tempImagePaths.length > 0 ? tempImagePaths : undefined,
       });
 
       currentClaude.onData((text) => {
@@ -382,6 +437,7 @@ function registerIpcHandlers() {
           content: result,
         });
         currentClaude = null;
+        currentClaudeDocPath = null;
       });
 
       currentClaude.onError((error) => {
@@ -391,6 +447,7 @@ function registerIpcHandlers() {
           error,
         });
         currentClaude = null;
+        currentClaudeDocPath = null;
       });
     },
   );
@@ -451,7 +508,150 @@ function registerIpcHandlers() {
     if (currentClaude) {
       currentClaude.kill();
       currentClaude = null;
+      currentClaudeDocPath = null;
     }
+  });
+
+  ipcMain.handle(
+    'claude:multi-generate',
+    async (
+      _event,
+      sections: Array<{ title: string; prompt: string }>,
+      filePath: string,
+      outline: string,
+      model?: string,
+    ) => {
+      const useModel = model || 'sonnet';
+      const maxConcurrent = 3;
+      const results: Array<{ title: string; content: string; error?: string }> = [];
+      let cancelled = false;
+      const activeProcesses: ReturnType<typeof spawnClaude>[] = [];
+
+      // Process sections with concurrency limit
+      const processSections = async () => {
+        let nextIndex = 0;
+        const running = new Set<Promise<void>>();
+
+        const processOne = async (index: number) => {
+          const section = sections[index];
+
+          // Notify renderer of section start
+          mainWindow?.webContents.send('claude:multi-progress', {
+            sectionIndex: index,
+            status: 'streaming',
+            output: '',
+          });
+
+          return new Promise<void>((resolve) => {
+            if (cancelled) {
+              results[index] = { title: section.title, content: '', error: 'Cancelled' };
+              mainWindow?.webContents.send('claude:multi-progress', {
+                sectionIndex: index,
+                status: 'error',
+                output: 'Cancelled',
+              });
+              resolve();
+              return;
+            }
+
+            const sectionPrompt = `You are writing one section of a larger document. Here is the full outline:\n\n${outline}\n\n---\n\nWrite ONLY the following section: "${section.title}"\n\n${section.prompt}\n\nWrite well-structured markdown content for this section only. Do not include a title heading — it will be added automatically.`;
+
+            let sectionOutput = '';
+            const proc = spawnClaude(sectionPrompt, {
+              model: useModel,
+              maxTurns: 3,
+            });
+            activeProcesses.push(proc);
+
+            proc.onData((text) => {
+              sectionOutput += text;
+              mainWindow?.webContents.send('claude:multi-progress', {
+                sectionIndex: index,
+                status: 'streaming',
+                output: sectionOutput,
+              });
+            });
+
+            proc.onComplete((content) => {
+              results[index] = { title: section.title, content };
+              mainWindow?.webContents.send('claude:multi-progress', {
+                sectionIndex: index,
+                status: 'complete',
+                output: content,
+              });
+              resolve();
+            });
+
+            proc.onError((error) => {
+              results[index] = { title: section.title, content: '', error };
+              mainWindow?.webContents.send('claude:multi-progress', {
+                sectionIndex: index,
+                status: 'error',
+                output: error,
+              });
+              resolve();
+            });
+          });
+        };
+
+        while (nextIndex < sections.length && !cancelled) {
+          while (running.size < maxConcurrent && nextIndex < sections.length) {
+            const idx = nextIndex++;
+            const promise = processOne(idx).then(() => { running.delete(promise); });
+            running.add(promise);
+          }
+          if (running.size > 0) {
+            await Promise.race(running);
+          }
+        }
+
+        // Wait for remaining
+        await Promise.all(running);
+      };
+
+      await processSections();
+
+      // Combine results
+      const combinedContent = results
+        .map(r => r.error ? `## ${r.title}\n\n*Error generating this section: ${r.error}*` : `## ${r.title}\n\n${r.content}`)
+        .join('\n\n---\n\n');
+
+      // Write to file
+      fs.writeFileSync(filePath, combinedContent, 'utf-8');
+
+      mainWindow?.webContents.send('claude:multi-complete', {
+        success: !cancelled,
+        filePath,
+        sectionCount: sections.length,
+        errorCount: results.filter(r => r.error).length,
+      });
+
+      return { success: true, filePath };
+    },
+  );
+
+  ipcMain.handle('claude:multi-cancel', async () => {
+    // Kill all active processes — the multi-generate handler checks the cancelled flag
+    mainWindow?.webContents.send('claude:multi-complete', {
+      success: false,
+      cancelled: true,
+    });
+  });
+
+  ipcMain.handle('settings:get', async () => readSettings());
+  ipcMain.handle('settings:set', async (_event, key: string, value: any) => {
+    const settings = readSettings();
+    settings[key] = value;
+    writeSettings(settings);
+    return settings;
+  });
+
+  ipcMain.handle('dialog:open-directory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openDirectory'],
+      title: 'Select Vault Directory',
+    });
+    return result.canceled ? null : result.filePaths[0];
   });
 
   ipcMain.handle('vault:resolve-root', async (_event, fromPath: string) => {
@@ -468,6 +668,129 @@ function registerIpcHandlers() {
     const vaultRoot = resolveVaultRoot(fromPath);
     if (!vaultRoot) return [];
     return scanVaultFiles(vaultRoot).map(f => f.relativePath);
+  });
+
+  ipcMain.handle('google:check-existing', async (_event, docPath: string) => {
+    const existing = getExistingDoc(docPath);
+    if (!existing) return null;
+    return { url: existing.url, title: existing.title, updatedAt: existing.updatedAt };
+  });
+
+  ipcMain.handle('google:share-doc', async (_event, markdown: string, title: string, docPath: string, action?: 'new' | 'update') => {
+    try {
+      // Strip YAML frontmatter
+      let md = markdown.replace(/^---\n[\s\S]*?\n---\n*/, '');
+      // Inline local images as base64 data URIs before converting to HTML
+      const docDir = docPath ? path.dirname(docPath) : '';
+      md = md.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, src) => {
+        if (src.startsWith('data:') || src.startsWith('http')) return _match;
+        const imgPath = path.resolve(docDir, src);
+        try {
+          const imgData = fs.readFileSync(imgPath);
+          const ext = path.extname(imgPath).toLowerCase();
+          const mime = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/png';
+          return `![${alt}](data:${mime};base64,${imgData.toString('base64')})`;
+        } catch {
+          console.error(`[google:share-doc] Image not found: ${imgPath}`);
+          return _match;
+        }
+      });
+      // Convert markdown to HTML and strip <hr> tags (Google Docs renders them as ugly thick colored rules)
+      let html = await marked.parse(md);
+      html = html.replace(/<hr\s*\/?>/gi, '');
+      // Inline any remaining local image paths in HTML (from raw <img> tags in markdown)
+      html = html.replace(/(<img\s[^>]*?)src="([^"]+)"/gi, (_match, before, src) => {
+        if (src.startsWith('data:') || src.startsWith('http')) return _match;
+        const imgPath = path.resolve(docDir, src);
+        try {
+          const imgData = fs.readFileSync(imgPath);
+          const ext = path.extname(imgPath).toLowerCase();
+          const mime = ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : ext === '.gif' ? 'image/gif' : ext === '.webp' ? 'image/webp' : 'image/png';
+          return `${before}src="data:${mime};base64,${imgData.toString('base64')}"`;
+        } catch {
+          console.error(`[google:share-doc] Image not found in HTML: ${imgPath}`);
+          return _match;
+        }
+      });
+      // Constrain images without explicit width — Google Docs ignores CSS
+      html = html.replace(/<img(?![^>]*\bwidth\b)/gi, '<img width="500" ');
+      // Inline styles on table elements — Google Docs ignores CSS for tables
+      const cellStyle = 'style="padding:1pt 4pt;font-size:10pt;line-height:1.15;vertical-align:top"';
+      html = html.replace(/<table>/gi, '<table style="border-collapse:collapse;font-size:10pt" cellpadding="0" cellspacing="0">');
+      html = html.replace(/<th(?=[\s>])/gi, `<th ${cellStyle}`);
+      html = html.replace(/<td(?=[\s>])/gi, `<td ${cellStyle}`);
+      // Wrap in styled HTML template
+      const wrappedHtml = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+body { font-family: Arial, sans-serif; font-size: 11pt; line-height: 1.3; color: #222; }
+h1 { font-size: 17pt; font-weight: bold; margin: 14pt 0 4pt; }
+h2 { font-size: 14pt; font-weight: bold; margin: 12pt 0 3pt; }
+h3 { font-size: 12pt; font-weight: bold; margin: 10pt 0 2pt; }
+h4, h5, h6 { font-size: 11pt; font-weight: bold; margin: 8pt 0 2pt; }
+p { margin: 0 0 4pt; }
+ul, ol { margin: 2pt 0 6pt; padding-left: 20pt; }
+li { margin: 1pt 0; }
+code { font-family: 'Courier New', monospace; font-size: 9pt; background-color: #f3f3f3; }
+pre { font-family: 'Courier New', monospace; font-size: 9pt; background-color: #f3f3f3; padding: 6pt; margin: 4pt 0; }
+pre code { background: none; }
+blockquote { border-left: 2px solid #ccc; margin: 4pt 0; padding: 2pt 0 2pt 10pt; color: #444; }
+table { border-collapse: collapse; margin: 4pt 0; }
+th, td { border: 1px solid #bbb; padding: 2pt 6pt; font-size: 10pt; }
+th { background-color: #f0f0f0; font-weight: bold; }
+</style></head><body>${html}</body></html>`;
+      let url: string;
+      const existing = getExistingDoc(docPath);
+      if (action === 'update' && existing) {
+        url = await updateGoogleDoc(existing.docId, wrappedHtml, title, docPath);
+      } else {
+        url = await uploadHtmlAsGoogleDoc(wrappedHtml, title, docPath);
+      }
+      return { success: true, url };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Upload failed' };
+    }
+  });
+
+  ipcMain.handle('google:pull-doc', async (_event, localPath: string) => {
+    try {
+      const existing = getExistingDoc(localPath);
+      if (!existing) throw new Error('No linked Google Doc found');
+
+      // Fetch comments + export text in parallel
+      const [rawComments, remoteText] = await Promise.all([
+        fetchDocComments(existing.docId),
+        exportDocAsText(existing.docId),
+      ]);
+
+      // Filter out already-pulled comment IDs
+      const pulledIds = getPulledCommentIds(localPath);
+      const newComments = rawComments.filter(c => !pulledIds.includes(c.id));
+
+      // Mark new comments as pulled
+      if (newComments.length > 0) {
+        markCommentsPulled(localPath, newComments.map(c => c.id));
+      }
+
+      // Shape comments for the renderer
+      const comments = newComments.map(c => ({
+        googleId: c.id,
+        selectedText: c.quotedFileContent?.value || '',
+        comment: `[${c.author.displayName}]: ${c.content}`,
+        createdTime: c.createdTime,
+      }));
+
+      return { comments, remoteText };
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to pull comments');
+    }
+  });
+
+  ipcMain.handle('google:open-url', async (_event, url: string) => {
+    shell.openExternal(url);
+  });
+
+  ipcMain.handle('google:sign-out', async () => {
+    clearTokens();
   });
 }
 
@@ -698,5 +1021,6 @@ app.on('before-quit', () => {
   }
   if (currentClaude) {
     currentClaude.kill();
+    currentClaudeDocPath = null;
   }
 });

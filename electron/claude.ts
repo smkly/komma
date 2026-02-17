@@ -8,9 +8,10 @@ interface SpawnClaudeOpts {
   maxTurns?: number;
   model?: string;
   mcpConfig?: string;
+  files?: string[];
 }
 
-interface ClaudeProcess {
+export interface ClaudeProcess {
   onData: (cb: (text: string) => void) => void;
   onComplete: (cb: (result: string) => void) => void;
   onError: (cb: (error: string) => void) => void;
@@ -64,6 +65,12 @@ export function spawnClaude(
 
   if (opts?.mcpConfig) {
     args.push('--mcp-config', opts.mcpConfig);
+  }
+
+  if (opts?.files) {
+    for (const f of opts.files) {
+      args.push('--file', f);
+    }
   }
 
   // Buffer events until callbacks are registered

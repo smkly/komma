@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo } from 'react';
 import { Comment } from '../types';
+import { DiffChunk, computeChunkedDiff, finalizeChunks as buildFinalMarkdown } from '../../lib/diff';
 
 interface UseClaudeOptions {
   filePath: string;
@@ -36,6 +37,8 @@ export function useClaude({
   const streamRef = useRef<HTMLDivElement>(null);
   const [beforeMarkdown, setBeforeMarkdown] = useState<string | null>(null);
   const [afterMarkdown, setAfterMarkdown] = useState<string | null>(null);
+  const [diffChunks, setDiffChunks] = useState<DiffChunk[]>([]);
+  const beforeMarkdownRef = useRef<string | null>(null);
 
   const loadLastOutput = useCallback(async () => {
     try {
@@ -58,6 +61,7 @@ export function useClaude({
   const approveChanges = useCallback(() => {
     setBeforeMarkdown(null);
     setAfterMarkdown(null);
+    setDiffChunks([]);
   }, []);
 
   const rejectChanges = useCallback(async () => {
@@ -76,20 +80,91 @@ export function useClaude({
       await loadDocument();
       setBeforeMarkdown(null);
       setAfterMarkdown(null);
+      setDiffChunks([]);
     } catch (error) {
       console.error('Failed to revert changes:', error);
     }
   }, [beforeMarkdown, filePath, comments, setComments, loadDocument]);
 
+  const approveChunk = useCallback((chunkId: string) => {
+    setDiffChunks(prev => prev.map(c =>
+      c.id === chunkId ? { ...c, status: 'approved' as const } : c
+    ));
+  }, []);
+
+  const rejectChunk = useCallback((chunkId: string) => {
+    setDiffChunks(prev => prev.map(c =>
+      c.id === chunkId ? { ...c, status: 'rejected' as const } : c
+    ));
+  }, []);
+
+  const approveAllChunks = useCallback(() => {
+    setDiffChunks(prev => prev.map(c =>
+      c.type === 'modification' ? { ...c, status: 'approved' as const } : c
+    ));
+  }, []);
+
+  const rejectAllChunks = useCallback(() => {
+    setDiffChunks(prev => prev.map(c =>
+      c.type === 'modification' ? { ...c, status: 'rejected' as const } : c
+    ));
+  }, []);
+
+  const finalizeChunks = useCallback(async () => {
+    const finalContent = buildFinalMarkdown(diffChunks);
+    try {
+      await fetch('/api/file', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: filePath, content: finalContent })
+      });
+      await loadDocument();
+      setBeforeMarkdown(null);
+      setAfterMarkdown(null);
+      setDiffChunks([]);
+    } catch (error) {
+      console.error('Failed to finalize chunks:', error);
+    }
+  }, [diffChunks, filePath, loadDocument]);
+
+  const cancelEdit = useCallback(async () => {
+    const api = window.electronAPI;
+    if (api) {
+      await api.claude.cancel();
+    }
+    editActiveRef.current = false;
+    setIsSending(false);
+    setIsStreaming(false);
+    setClaudeOutput('Edit cancelled');
+  }, []);
+
+  const restoreState = useCallback((before: string | null, after: string | null, output: string, stream: string, showLast: boolean) => {
+    setBeforeMarkdown(before);
+    setAfterMarkdown(after);
+    beforeMarkdownRef.current = before;
+    if (before && after) {
+      setDiffChunks(computeChunkedDiff(before, after));
+    } else {
+      setDiffChunks([]);
+    }
+    setClaudeOutput(output);
+    setStreamOutput(stream);
+    setShowLastOutput(showLast);
+    setIsSending(false);
+    setIsStreaming(false);
+  }, []);
+
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 
   const [model, setModel] = useState<string>('sonnet');
+  const editActiveRef = useRef(false);
 
   const sendToClaude = async () => {
     const pendingComments = comments.filter(c => c.status === 'pending');
     if (pendingComments.length === 0) return;
 
     setBeforeMarkdown(markdown);
+    beforeMarkdownRef.current = markdown;
 
     setIsSending(true);
     setClaudeOutput('');
@@ -149,7 +224,8 @@ export function useClaude({
         });
 
         const cleanupComplete = api.claude.onComplete(async (data) => {
-          if (data.type === 'edit') {
+          if (data.type === 'edit' && editActiveRef.current) {
+            editActiveRef.current = false;
             cleanupStream();
             cleanupComplete();
             if (data.success) {
@@ -162,6 +238,11 @@ export function useClaude({
                 const newFileData = await newFileRes.json();
                 if (newFileData.content) {
                   setAfterMarkdown(newFileData.content);
+                  // Compute chunked diff for per-chunk review
+                  const saved = beforeMarkdownRef.current;
+                  if (saved) {
+                    setDiffChunks(computeChunkedDiff(saved, newFileData.content));
+                  }
                 }
               } catch (e) {
                 // Ignore — diff just won't show
@@ -178,6 +259,7 @@ export function useClaude({
           }
         });
 
+        editActiveRef.current = true;
         await api.claude.sendEdit(prompt, filePath, model, refs);
       } catch (error) {
         console.error('Failed to send to Claude via IPC:', error);
@@ -237,6 +319,10 @@ export function useClaude({
                   const newFileData = await newFileRes.json();
                   if (newFileData.content) {
                     setAfterMarkdown(newFileData.content);
+                    const saved = beforeMarkdownRef.current;
+                    if (saved) {
+                      setDiffChunks(computeChunkedDiff(saved, newFileData.content));
+                    }
                   }
                 } catch (e) {
                   // Ignore — diff just won't show
@@ -297,5 +383,20 @@ export function useClaude({
     afterMarkdown,
     approveChanges,
     rejectChanges,
+    cancelEdit,
+    restoreState,
+    diffChunks,
+    diffChunkStats: useMemo(() => {
+      const mods = diffChunks.filter(c => c.type === 'modification');
+      const added = mods.reduce((sum, c) => sum + c.afterLines.length, 0);
+      const removed = mods.reduce((sum, c) => sum + c.beforeLines.length, 0);
+      const pending = mods.filter(c => c.status === 'pending').length;
+      return { added, removed, pending };
+    }, [diffChunks]),
+    approveChunk,
+    rejectChunk,
+    approveAllChunks,
+    rejectAllChunks,
+    finalizeChunks,
   };
 }

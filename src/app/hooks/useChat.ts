@@ -16,6 +16,7 @@ interface ChatMessage {
   content: string;
   context_selection: string | null;
   created_at: string;
+  images?: string[]; // data URI previews (client-side only, not persisted)
 }
 
 export type { ChatSession, ChatMessage };
@@ -27,6 +28,7 @@ export function useChat(documentPath: string, model?: string) {
   const [streamOutput, setStreamOutput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const streamRef = useRef<HTMLDivElement>(null);
+  const chatActiveRef = useRef(false);
 
   const loadSessions = useCallback(async (docPath: string) => {
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -34,7 +36,11 @@ export function useChat(documentPath: string, model?: string) {
         const res = await fetch(`/api/chat?document_path=${encodeURIComponent(docPath)}`);
         if (res.ok) {
           const data = await res.json();
-          if (data.sessions) setSessions(data.sessions);
+          if (data.sessions) {
+            setSessions(data.sessions);
+            setActiveSessionId(null);
+            setMessages([]);
+          }
           return;
         }
       } catch {
@@ -69,7 +75,7 @@ export function useChat(documentPath: string, model?: string) {
 
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
 
-  const sendMessage = useCallback(async (message: string, contextSelection?: string, refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean }) => {
+  const sendMessage = useCallback(async (message: string, contextSelection?: string, refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean }, images?: Array<{ data: string; mimeType: string; name: string }>) => {
     setIsStreaming(true);
     setStreamOutput('');
 
@@ -91,6 +97,7 @@ export function useChat(documentPath: string, model?: string) {
       content: message,
       context_selection: contextSelection || null,
       created_at: new Date().toISOString(),
+      images: images?.map(img => `data:${img.mimeType};base64,${img.data}`),
     };
     setMessages(prev => [...prev, tempUserMsg]);
 
@@ -135,6 +142,8 @@ export function useChat(documentPath: string, model?: string) {
         // Build history from current messages for context
         const history = messages.map(m => ({ role: m.role, content: m.content }));
 
+        chatActiveRef.current = true;
+
         const cleanupStream = api.claude.onStream((streamData) => {
           if (streamData.type === 'chat') {
             setStreamOutput(streamData.content);
@@ -145,7 +154,8 @@ export function useChat(documentPath: string, model?: string) {
         });
 
         const cleanupComplete = api.claude.onComplete(async (completeData) => {
-          if (completeData.type === 'chat') {
+          if (completeData.type === 'chat' && chatActiveRef.current) {
+            chatActiveRef.current = false;
             cleanupStream();
             cleanupComplete();
 
@@ -189,6 +199,7 @@ export function useChat(documentPath: string, model?: string) {
           history,
           model,
           refs,
+          images,
         );
       } else {
         // Fetch-based flow (Next.js API routes + file watcher)
@@ -275,6 +286,24 @@ export function useChat(documentPath: string, model?: string) {
     }
   }, [activeSessionId]);
 
+  const cancelChat = useCallback(async () => {
+    const api = window.electronAPI;
+    if (api) {
+      await api.claude.cancel();
+    }
+    chatActiveRef.current = false;
+    setIsStreaming(false);
+    setStreamOutput('');
+  }, []);
+
+  const restoreState = useCallback((sessionId: number | null, msgs: ChatMessage[], sess: ChatSession[]) => {
+    setActiveSessionId(sessionId);
+    setMessages(msgs);
+    setSessions(sess);
+    setStreamOutput('');
+    setIsStreaming(false);
+  }, []);
+
   return {
     sessions,
     activeSessionId,
@@ -288,5 +317,7 @@ export function useChat(documentPath: string, model?: string) {
     selectSession,
     sendMessage,
     deleteSession,
+    cancelChat,
+    restoreState,
   };
 }
