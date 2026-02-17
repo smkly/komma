@@ -25,10 +25,13 @@ function writeSettings(settings: Record<string, any>) {
 
 let mainWindow: BrowserWindow | null = null;
 let nextServer: ChildProcess | null = null;
-let currentClaude: ReturnType<typeof spawnClaude> | null = null;
-let currentClaudeDocPath: string | null = null;
+let currentEdit: ReturnType<typeof spawnClaude> | null = null;
+let currentEditDocPath: string | null = null;
+let currentChat: ReturnType<typeof spawnClaude> | null = null;
+let currentChatDocPath: string | null = null;
 let serverPort: number | null = null;
-let accumulatedStreamText = '';
+let accumulatedEditText = '';
+let accumulatedChatText = '';
 let pendingOpenFile: string | null = process.env.HELM_OPEN_FILE || null;
 
 function findFreePort(): Promise<number> {
@@ -278,14 +281,11 @@ function registerIpcHandlers() {
   ipcMain.handle(
     'claude:send-edit',
     async (_event, prompt: string, filePath: string, model?: string, refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean }) => {
-      if (currentClaude) {
-        if (currentClaudeDocPath && currentClaudeDocPath !== filePath) {
-          throw new Error(`Claude is currently working on ${currentClaudeDocPath.split('/').pop()}. Please wait or cancel first.`);
-        }
-        currentClaude.kill();
-        currentClaude = null;
+      if (currentEdit) {
+        currentEdit.kill();
+        currentEdit = null;
       }
-      currentClaudeDocPath = filePath;
+      currentEditDocPath = filePath;
 
       const useModel = model || 'sonnet';
       const isFast = useModel !== 'opus';
@@ -304,39 +304,39 @@ function registerIpcHandlers() {
         : (fileExists
             ? `Edit the file at ${filePath}:\n\n${prompt}${refContext}`
             : `${prompt}${refContext}`);
-      accumulatedStreamText = '';
-      currentClaude = spawnClaude(fullPrompt, {
+      accumulatedEditText = '';
+      currentEdit = spawnClaude(fullPrompt, {
         allowedTools: isFast ? ['Read', 'Edit', 'Write'] : undefined,
         maxTurns: isFast ? 5 : undefined,
         model: useModel,
       });
 
-      currentClaude.onData((text) => {
-        accumulatedStreamText += text;
+      currentEdit.onData((text) => {
+        accumulatedEditText += text;
         mainWindow?.webContents.send('claude:stream', {
           type: 'edit',
-          content: accumulatedStreamText,
+          content: accumulatedEditText,
         });
       });
 
-      currentClaude.onComplete((result) => {
+      currentEdit.onComplete((result) => {
         mainWindow?.webContents.send('claude:complete', {
           type: 'edit',
           success: true,
           content: result,
         });
-        currentClaude = null;
-        currentClaudeDocPath = null;
+        currentEdit = null;
+        currentEditDocPath = null;
       });
 
-      currentClaude.onError((error) => {
+      currentEdit.onError((error) => {
         mainWindow?.webContents.send('claude:complete', {
           type: 'edit',
           success: false,
           error,
         });
-        currentClaude = null;
-        currentClaudeDocPath = null;
+        currentEdit = null;
+        currentEditDocPath = null;
       });
     },
   );
@@ -354,14 +354,11 @@ function registerIpcHandlers() {
       refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean },
       images?: Array<{ data: string; mimeType: string; name: string }>,
     ) => {
-      if (currentClaude) {
-        if (currentClaudeDocPath && currentClaudeDocPath !== docPath) {
-          throw new Error(`Claude is currently working on ${currentClaudeDocPath.split('/').pop()}. Please wait or cancel first.`);
-        }
-        currentClaude.kill();
-        currentClaude = null;
+      if (currentChat) {
+        currentChat.kill();
+        currentChat = null;
       }
-      currentClaudeDocPath = docPath;
+      currentChatDocPath = docPath;
 
       let promptParts: string[] = [];
 
@@ -415,38 +412,38 @@ function registerIpcHandlers() {
 
       const useModel = model || 'sonnet';
       const fullPrompt = promptParts.join('\n\n---\n\n');
-      accumulatedStreamText = '';
-      currentClaude = spawnClaude(fullPrompt, {
+      accumulatedChatText = '';
+      currentChat = spawnClaude(fullPrompt, {
         maxTurns: useModel === 'opus' ? undefined : 3,
         model: useModel,
       });
 
-      currentClaude.onData((text) => {
-        accumulatedStreamText += text;
+      currentChat.onData((text) => {
+        accumulatedChatText += text;
         mainWindow?.webContents.send('claude:stream', {
           type: 'chat',
-          content: accumulatedStreamText,
+          content: accumulatedChatText,
         });
       });
 
-      currentClaude.onComplete((result) => {
+      currentChat.onComplete((result) => {
         mainWindow?.webContents.send('claude:complete', {
           type: 'chat',
           success: true,
           content: result,
         });
-        currentClaude = null;
-        currentClaudeDocPath = null;
+        currentChat = null;
+        currentChatDocPath = null;
       });
 
-      currentClaude.onError((error) => {
+      currentChat.onError((error) => {
         mainWindow?.webContents.send('claude:complete', {
           type: 'chat',
           success: false,
           error,
         });
-        currentClaude = null;
-        currentClaudeDocPath = null;
+        currentChat = null;
+        currentChatDocPath = null;
       });
     },
   );
@@ -504,10 +501,15 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('claude:cancel', async () => {
-    if (currentClaude) {
-      currentClaude.kill();
-      currentClaude = null;
-      currentClaudeDocPath = null;
+    if (currentEdit) {
+      currentEdit.kill();
+      currentEdit = null;
+      currentEditDocPath = null;
+    }
+    if (currentChat) {
+      currentChat.kill();
+      currentChat = null;
+      currentChatDocPath = null;
     }
   });
 
@@ -1018,8 +1020,12 @@ app.on('before-quit', () => {
   if (nextServer && !nextServer.killed) {
     nextServer.kill('SIGTERM');
   }
-  if (currentClaude) {
-    currentClaude.kill();
-    currentClaudeDocPath = null;
+  if (currentEdit) {
+    currentEdit.kill();
+    currentEditDocPath = null;
+  }
+  if (currentChat) {
+    currentChat.kill();
+    currentChatDocPath = null;
   }
 });
