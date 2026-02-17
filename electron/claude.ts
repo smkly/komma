@@ -73,6 +73,7 @@ export function spawnClaude(
   let dataCallback: ((text: string) => void) | null = null;
   let completeCallback: ((result: string) => void) | null = null;
   let errorCallback: ((error: string) => void) | null = null;
+  let completeFired = false;
   let buffer = '';
 
   // Build env without CLAUDECODE (must delete, not set empty)
@@ -107,6 +108,7 @@ export function spawnClaude(
             }
           }
         } else if (parsed.type === 'result') {
+          completeFired = true;
           const result = parsed.result != null
             ? (typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result))
             : '';
@@ -146,6 +148,7 @@ export function spawnClaude(
       try {
         const parsed = JSON.parse(buffer);
         if (parsed.type === 'result') {
+          completeFired = true;
           const result = parsed.result != null
             ? (typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result))
             : '';
@@ -166,6 +169,13 @@ export function spawnClaude(
         errorCallback(errMsg);
       } else {
         pendingError = (pendingError || '') + errMsg;
+      }
+    } else if (pendingComplete === null && !completeFired) {
+      // Process exited cleanly but no result message was emitted — signal completion
+      if (completeCallback) {
+        completeCallback('');
+      } else {
+        pendingComplete = '';
       }
     }
   });

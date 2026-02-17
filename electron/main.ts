@@ -430,7 +430,7 @@ function registerIpcHandlers() {
         mainWindow?.webContents.send('claude:complete', {
           type: 'chat',
           success: true,
-          content: result,
+          content: result || accumulatedChatText || '(No response)',
         });
         currentChat = null;
         currentChatDocPath = null;
