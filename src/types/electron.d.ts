@@ -7,6 +7,14 @@ interface VaultRefs {
   architecture?: boolean;
 }
 
+interface GitCommit {
+  hash: string;
+  shortHash: string;
+  message: string;
+  date: string;
+  author: string;
+}
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -37,6 +45,11 @@ declare global {
           remoteText: string;
         }>;
       };
+      git: {
+        commit(filePath: string, message: string): Promise<{ success: boolean; error?: string; sha?: string; skipped?: boolean; noChanges?: boolean }>;
+        log(filePath: string, limit?: number): Promise<{ success: boolean; commits?: GitCommit[]; error?: string }>;
+        show(filePath: string, sha: string): Promise<{ success: boolean; content?: string; error?: string }>;
+      };
       claude: {
         sendEdit(prompt: string, filePath: string, model?: string, refs?: VaultRefs): Promise<void>;
         sendChat(
@@ -50,6 +63,13 @@ declare global {
           images?: Array<{ data: string; mimeType: string; name: string }>
         ): Promise<void>;
         cancel(): Promise<void>;
+        reviseChunk(
+          chunkId: string,
+          beforeText: string,
+          currentAfterText: string,
+          instruction: string,
+          model?: string,
+        ): Promise<{ success: boolean; revisedText?: string; error?: string }>;
         listMcps(): Promise<{ name: string; source?: string }[]>;
         onStream(
           callback: (data: { type: 'edit' | 'chat'; content: string }) => void
@@ -60,6 +80,7 @@ declare global {
             success: boolean;
             content?: string;
             error?: string;
+            proposal?: { originalContent: string; proposedContent: string; docPath: string } | null;
           }) => void
         ): () => void;
         multiGenerate(
