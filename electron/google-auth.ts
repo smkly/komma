@@ -5,9 +5,30 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Replace with your Google Cloud Console OAuth 2.0 Client ID
-const GOOGLE_CLIENT_ID = 'REDACTED_GOOGLE_CLIENT_ID';
-const GOOGLE_CLIENT_SECRET = 'REDACTED_GOOGLE_CLIENT_SECRET';
+// Google OAuth credentials — loaded from env vars or ~/.helm/google-oauth.json
+// See SETUP.md for how to obtain your own credentials
+let _googleCreds: { clientId: string; clientSecret: string } | null = null;
+function getGoogleCreds() {
+  if (_googleCreds) return _googleCreds;
+  // 1. Environment variables
+  const envId = process.env.HELM_GOOGLE_CLIENT_ID;
+  const envSecret = process.env.HELM_GOOGLE_CLIENT_SECRET;
+  if (envId && envSecret) {
+    _googleCreds = { clientId: envId, clientSecret: envSecret };
+    return _googleCreds;
+  }
+  // 2. Config file at ~/.helm/google-oauth.json
+  try {
+    const configPath = path.join(require('os').homedir(), '.helm', 'google-oauth.json');
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    if (config.clientId && config.clientSecret) {
+      _googleCreds = { clientId: config.clientId, clientSecret: config.clientSecret };
+      return _googleCreds;
+    }
+  } catch { /* not configured */ }
+  _googleCreds = { clientId: '', clientSecret: '' };
+  return _googleCreds;
+}
 
 const REDIRECT_URI = 'http://localhost:19837/callback';
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -92,8 +113,8 @@ function httpsRequest(
 
 async function exchangeCodeForTokens(code: string, codeVerifier: string): Promise<TokenData> {
   const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
-    client_secret: GOOGLE_CLIENT_SECRET,
+    client_id: getGoogleCreds().clientId,
+    client_secret: getGoogleCreds().clientSecret,
     code,
     code_verifier: codeVerifier,
     grant_type: 'authorization_code',
@@ -126,8 +147,8 @@ async function exchangeCodeForTokens(code: string, codeVerifier: string): Promis
 
 async function refreshAccessToken(refreshToken: string): Promise<TokenData> {
   const params = new URLSearchParams({
-    client_id: GOOGLE_CLIENT_ID,
-    client_secret: GOOGLE_CLIENT_SECRET,
+    client_id: getGoogleCreds().clientId,
+    client_secret: getGoogleCreds().clientSecret,
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
   });
@@ -227,7 +248,7 @@ export function startOAuthFlow(): Promise<TokenData> {
       const authUrl =
         `${AUTH_ENDPOINT}?` +
         new URLSearchParams({
-          client_id: GOOGLE_CLIENT_ID,
+          client_id: getGoogleCreds().clientId,
           redirect_uri: REDIRECT_URI,
           response_type: 'code',
           scope: SCOPES,

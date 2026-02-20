@@ -44,3 +44,14 @@ next-env.d.ts
 
 # sqlite data
 data/
+
+# debug artifacts & screenshots
+debug-*
+screenshot-*
+snapshot-*
+test-screenshot*
+test-screenshots/
+qa-screenshots/
+
+# release builds
+release/
