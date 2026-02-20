@@ -1,36 +1,96 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Helm
 
-## Getting Started
+A markdown document editor with AI editing, inline diff review, and git history — built with Electron + Next.js.
 
-First, run the development server:
+## Quick Start
+
+### Prerequisites
+
+- **Node.js v20+** — `node -v`
+- **Git** — `git -v`
+- **Xcode Command Line Tools** (macOS) — `xcode-select --install`
+- **Claude CLI** — see below
+
+### Install Claude CLI
+
+Helm uses the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) for AI features. It runs on your Claude Max subscription — no API key needed.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install -g @anthropic-ai/claude-code
+claude --version   # verify install
+claude             # login (opens browser)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Run
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+git clone https://github.com/0xSmick/helm.git
+cd helm
+npm install
+npm run electron:dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Features
 
-## Learn More
+- **Rich markdown editor** with vim keybindings (toggle in status bar)
+- **AI edits** — select text, add comments (Cmd+K), send to Claude (Cmd+Enter) for inline diff review with accept/reject per chunk
+- **AI chat** — conversational editing with full document context
+- **Git history** — sidebar tab showing commit history with read-only inline diffs
+- **Auto-commit** — saves are committed as "Manual save", edits as "Applied edit"
+- **Google Docs sync** — share documents, pull comments (optional)
+- **Split panes** — view two documents side by side (Cmd+\\)
+- **Vault references** — `@vault`, `@doc`, `@architecture` for context-aware editing
+- **File explorer** — Cmd+B for sidebar tree, Cmd+P for fuzzy finder
 
-To learn more about Next.js, take a look at the following resources:
+## Keyboard Shortcuts
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Shortcut | Action |
+|----------|--------|
+| Cmd+E | Toggle edit mode |
+| Cmd+K | Add comment on selection |
+| Cmd+Enter | Send comments to Claude |
+| Cmd+P | Open file finder |
+| Cmd+B | Toggle file explorer |
+| Cmd+Alt+B | Toggle sidebar |
+| Cmd+T | New tab |
+| Cmd+W | Close tab |
+| Cmd+\\ | Toggle split pane |
+| Cmd+F | Find and replace |
+| Cmd+S | Save (in edit mode) |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Architecture
 
-## Deploy on Vercel
+```
+electron/main.ts       Electron main process — IPC, Claude spawning, git
+electron/preload.ts    Context bridge (renderer <-> main)
+electron/claude.ts     Spawns claude -p CLI, parses NDJSON stream
+src/app/page.tsx       Main React component
+src/app/components/    UI components (Sidebar, InlineDiffView, tabs/)
+src/app/hooks/         React hooks (useDocument, useClaude, useChat, useVim)
+src/lib/db.ts          SQLite database (comments, changelogs, chat)
+data/helm.db           Database file (created on first run)
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Scripts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Command | Description |
+|---------|-------------|
+| `npm run electron:dev` | Compile + launch in dev mode |
+| `npm run dist` | Build + package as .app/.dmg |
+| `npm run build:electron` | Compile Electron TypeScript only |
+
+## Configuration
+
+**Vault root** — set in Settings (gear icon) or place a `.vault` marker file at your documents root directory.
+
+**Settings** are stored at `~/.helm/config.json`.
+
+## Troubleshooting
+
+**"Unable to acquire lock at .next/dev/lock"** — Another dev server is running. Kill it with `ps aux | grep "next dev"` then `kill <PID>`, or `rm .next/dev/lock`.
+
+**better-sqlite3 build failure** — Run `xcode-select --install` then `npm install` again.
+
+**Claude features not working** — Verify `claude --version` succeeds and you're logged in.
+
+See [SETUP.md](./SETUP.md) for the full setup guide with detailed troubleshooting.
