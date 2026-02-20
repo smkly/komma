@@ -4,30 +4,33 @@ A markdown document editor with AI editing, inline diff review, and git history 
 
 ## Quick Start
 
+### One-liner install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/0xSmick/helm/main/scripts/install.sh | bash
+```
+
+This clones the repo to `~/Developer/helm`, installs dependencies, and compiles Electron. Set `HELM_DIR` to change the install location.
+
+### Manual install
+
+```bash
+git clone https://github.com/0xSmick/helm.git
+cd helm
+./scripts/setup.sh    # checks prerequisites, installs deps, compiles
+npm run electron:dev   # launch
+```
+
 ### Prerequisites
 
 - **Node.js v20+** — `node -v`
 - **Git** — `git -v`
 - **Xcode Command Line Tools** (macOS) — `xcode-select --install`
-- **Claude CLI** — see below
-
-### Install Claude CLI
-
-Helm uses the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) for AI features. It runs on your Claude Max subscription — no API key needed.
+- **Claude CLI** — AI features require the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (runs on your Max subscription, no API key):
 
 ```bash
 npm install -g @anthropic-ai/claude-code
-claude --version   # verify install
-claude             # login (opens browser)
-```
-
-### Run
-
-```bash
-git clone https://github.com/0xSmick/helm.git
-cd helm
-npm install
-npm run electron:dev
+claude   # login (opens browser)
 ```
 
 ## Features
