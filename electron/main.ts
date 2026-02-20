@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, shell } from 'electron';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, execFile, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -32,6 +32,8 @@ let currentChatDocPath: string | null = null;
 let serverPort: number | null = null;
 let accumulatedEditText = '';
 let accumulatedChatText = '';
+let currentChatProposalPath: string | null = null;
+let currentChatOriginalContent: string | null = null;
 let pendingOpenFile: string | null = process.env.HELM_OPEN_FILE || null;
 
 function findFreePort(): Promise<number> {
@@ -270,7 +272,101 @@ function resolveRefsToContext(
   return context;
 }
 
+function gitExec(args: string[], cwd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile('git', args, { cwd }, (err, stdout, stderr) => {
+      if (err) reject(new Error(stderr.trim() || err.message));
+      else resolve(stdout.trim());
+    });
+  });
+}
+
 function registerIpcHandlers() {
+  ipcMain.handle('git:log', async (_event, filePath: string, limit = 50) => {
+    try {
+      const dir = path.dirname(filePath);
+      let repoRoot: string;
+      try {
+        repoRoot = await gitExec(['-C', dir, 'rev-parse', '--show-toplevel'], dir);
+      } catch {
+        return { success: true, commits: [] };
+      }
+      const relativePath = path.relative(repoRoot, filePath);
+      const raw = await gitExec(
+        ['-C', repoRoot, 'log', '--follow', '--format=%H%n%h%n%s%n%ai%n%an', `-n`, String(limit), '--', relativePath],
+        repoRoot,
+      );
+      if (!raw) return { success: true, commits: [] };
+      const lines = raw.split('\n');
+      const commits: Array<{ hash: string; shortHash: string; message: string; date: string; author: string }> = [];
+      for (let i = 0; i + 4 < lines.length; i += 5) {
+        commits.push({
+          hash: lines[i],
+          shortHash: lines[i + 1],
+          message: lines[i + 2],
+          date: lines[i + 3],
+          author: lines[i + 4],
+        });
+      }
+      return { success: true, commits };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Git log failed', commits: [] };
+    }
+  });
+
+  ipcMain.handle('git:show', async (_event, filePath: string, sha: string) => {
+    try {
+      const dir = path.dirname(filePath);
+      let repoRoot: string;
+      try {
+        repoRoot = await gitExec(['-C', dir, 'rev-parse', '--show-toplevel'], dir);
+      } catch {
+        return { success: false, error: 'Not a git repository' };
+      }
+      const relativePath = path.relative(repoRoot, filePath);
+      const content = await gitExec(['-C', repoRoot, 'show', `${sha}:${relativePath}`], repoRoot);
+      return { success: true, content };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Git show failed' };
+    }
+  });
+
+  ipcMain.handle('git:commit', async (_event, filePath: string, message: string) => {
+    try {
+      const dir = path.dirname(filePath);
+
+      // 1. Find git root — if not in a repo, silent no-op
+      let repoRoot: string;
+      try {
+        repoRoot = await gitExec(['-C', dir, 'rev-parse', '--show-toplevel'], dir);
+      } catch {
+        return { success: true, skipped: true };
+      }
+
+      // 2. Get relative path from repo root
+      const relativePath = path.relative(repoRoot, filePath);
+
+      // 3. Stage the file
+      await gitExec(['-C', repoRoot, 'add', relativePath], repoRoot);
+
+      // 4. Check if anything is staged
+      try {
+        await gitExec(['-C', repoRoot, 'diff', '--cached', '--quiet'], repoRoot);
+        // Exit code 0 means nothing staged
+        return { success: true, noChanges: true };
+      } catch {
+        // Exit code 1 means there are staged changes — proceed to commit
+      }
+
+      // 5. Commit
+      const result = await gitExec(['-C', repoRoot, 'commit', '-m', message], repoRoot);
+      const shaMatch = result.match(/\[[\w-]+ ([a-f0-9]+)\]/);
+      return { success: true, sha: shaMatch?.[1] };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Git commit failed' };
+    }
+  });
+
   // Renderer calls this on mount to get any file that triggered the app launch
   ipcMain.handle('app:get-pending-file', () => {
     const file = pendingOpenFile;
@@ -360,15 +456,43 @@ function registerIpcHandlers() {
       }
       currentChatDocPath = docPath;
 
+      // Snapshot original content and create temp copy for proposal-based editing
+      let originalContent = '';
+      let proposalPath = '';
+      try {
+        originalContent = fs.readFileSync(docPath, 'utf-8');
+        const tmpDir = path.join(os.tmpdir(), 'helm-proposals');
+        if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+        proposalPath = path.join(tmpDir, `proposal-${Date.now()}.md`);
+        fs.writeFileSync(proposalPath, originalContent);
+        currentChatProposalPath = proposalPath;
+        currentChatOriginalContent = originalContent;
+      } catch {
+        proposalPath = '';
+        currentChatProposalPath = null;
+        currentChatOriginalContent = null;
+      }
+
+      const editTarget = proposalPath || docPath;
+
       let promptParts: string[] = [];
+
+      // System framing — tell the agent what actions it can take
+      promptParts.push(
+        `You are a writing assistant for this document. You can:\n` +
+        `1. Edit sections of the current document at ${editTarget} — when the user asks you to change, improve, rewrite, or fix something, edit the file directly.\n` +
+        `2. Create a new document in the same directory — when the user asks for a new document, summary, or derivative work, create a new file in ${path.dirname(docPath)}.\n` +
+        `3. Answer questions about the document — when the user asks about content, structure, or meaning, respond conversationally.\n\n` +
+        `Be explicit about which action you're taking. Prefer editing the existing file over creating new ones unless a new document is specifically requested.`
+      );
 
       // Include document content if available
       if (docPath) {
         try {
-          const docContent = fs.readFileSync(docPath, 'utf-8');
-          promptParts.push(`The user is working on a document at ${docPath}. Here is its current content:\n\n${docContent}`);
+          const docContent = originalContent || fs.readFileSync(docPath, 'utf-8');
+          promptParts.push(`The user is working on a document at ${editTarget}. Here is its current content:\n\n${docContent}`);
         } catch {
-          promptParts.push(`The user is working on a document at ${docPath} (could not read file).`);
+          promptParts.push(`The user is working on a document at ${editTarget} (could not read file).`);
         }
       }
 
@@ -427,16 +551,41 @@ function registerIpcHandlers() {
       });
 
       currentChat.onComplete((result) => {
+        // Read proposed content from temp file, then diff against original
+        let proposedContent = currentChatOriginalContent || '';
+        if (currentChatProposalPath) {
+          try { proposedContent = fs.readFileSync(currentChatProposalPath, 'utf-8'); } catch {}
+          try { fs.unlinkSync(currentChatProposalPath); } catch {}
+        }
+
+        // Safety: restore original if the real file was somehow modified
+        if (currentChatOriginalContent) {
+          try {
+            const current = fs.readFileSync(docPath, 'utf-8');
+            if (current !== currentChatOriginalContent) {
+              fs.writeFileSync(docPath, currentChatOriginalContent);
+            }
+          } catch {}
+        }
+
+        const hasEdits = currentChatOriginalContent && proposedContent !== currentChatOriginalContent;
         mainWindow?.webContents.send('claude:complete', {
           type: 'chat',
           success: true,
           content: result || accumulatedChatText || '(No response)',
+          proposal: hasEdits ? { originalContent: currentChatOriginalContent, proposedContent, docPath } : null,
         });
         currentChat = null;
         currentChatDocPath = null;
+        currentChatProposalPath = null;
+        currentChatOriginalContent = null;
       });
 
       currentChat.onError((error) => {
+        // Clean up temp file on error
+        if (currentChatProposalPath) {
+          try { fs.unlinkSync(currentChatProposalPath); } catch {}
+        }
         mainWindow?.webContents.send('claude:complete', {
           type: 'chat',
           success: false,
@@ -444,6 +593,8 @@ function registerIpcHandlers() {
         });
         currentChat = null;
         currentChatDocPath = null;
+        currentChatProposalPath = null;
+        currentChatOriginalContent = null;
       });
     },
   );
@@ -510,7 +661,54 @@ function registerIpcHandlers() {
       currentChat.kill();
       currentChat = null;
       currentChatDocPath = null;
+      if (currentChatProposalPath) {
+        try { fs.unlinkSync(currentChatProposalPath); } catch {}
+        currentChatProposalPath = null;
+        currentChatOriginalContent = null;
+      }
     }
+  });
+
+  ipcMain.handle('claude:revise-chunk', async (
+    _event,
+    chunkId: string,
+    beforeText: string,
+    currentAfterText: string,
+    instruction: string,
+    model?: string,
+  ) => {
+    const prompt = [
+      'You are revising a proposed change to a document.',
+      '', 'ORIGINAL TEXT (before):', '```', beforeText, '```',
+      '', 'CURRENT PROPOSAL (after):', '```', currentAfterText, '```',
+      '', `USER'S REVISION REQUEST: ${instruction}`,
+      '', 'Return ONLY the revised text. No explanations, no code fences, no preamble.',
+    ].join('\n');
+
+    return new Promise((resolve) => {
+      const revision = spawnClaude(prompt, {
+        model: model || 'sonnet',
+        maxTurns: 1,
+        allowedTools: ['Read'],  // No Edit/Write — just text output
+      });
+      let result = '';
+      let hasError = false;
+      revision.onData((text) => { result += text; });
+      revision.onComplete((final) => {
+        const text = (final || result).trim();
+        if (text) {
+          resolve({ success: true, revisedText: text });
+        } else {
+          resolve({ success: false, error: 'Claude returned an empty response' });
+        }
+      });
+      revision.onError((error) => {
+        if (!hasError) {
+          hasError = true;
+          resolve({ success: false, error: error || 'Revision failed' });
+        }
+      });
+    });
   });
 
   ipcMain.handle(
@@ -817,6 +1015,11 @@ function buildAppMenu() {
       label: 'File',
       submenu: [
         {
+          label: 'New Tab',
+          accelerator: 'CmdOrCtrl+T',
+          click: () => send('menu:action', 'new-tab'),
+        },
+        {
           label: 'New Document',
           accelerator: 'CmdOrCtrl+N',
           click: () => send('menu:action', 'new-document'),
@@ -1027,5 +1230,10 @@ app.on('before-quit', () => {
   if (currentChat) {
     currentChat.kill();
     currentChatDocPath = null;
+    if (currentChatProposalPath) {
+      try { fs.unlinkSync(currentChatProposalPath); } catch {}
+      currentChatProposalPath = null;
+      currentChatOriginalContent = null;
+    }
   }
 });

@@ -52,6 +52,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return ipcRenderer.invoke('google:pull-doc', localPath);
     },
   },
+  git: {
+    commit(filePath: string, message: string): Promise<{ success: boolean; error?: string; sha?: string; skipped?: boolean; noChanges?: boolean }> {
+      return ipcRenderer.invoke('git:commit', filePath, message);
+    },
+    log(filePath: string, limit?: number): Promise<{ success: boolean; commits?: Array<{ hash: string; shortHash: string; message: string; date: string; author: string }>; error?: string }> {
+      return ipcRenderer.invoke('git:log', filePath, limit);
+    },
+    show(filePath: string, sha: string): Promise<{ success: boolean; content?: string; error?: string }> {
+      return ipcRenderer.invoke('git:show', filePath, sha);
+    },
+  },
   claude: {
     sendEdit(prompt: string, filePath: string, model?: string, refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean }): Promise<void> {
       return ipcRenderer.invoke('claude:send-edit', prompt, filePath, model, refs);
@@ -81,6 +92,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cancel(): Promise<void> {
       return ipcRenderer.invoke('claude:cancel');
     },
+    reviseChunk(chunkId: string, beforeText: string, currentAfterText: string, instruction: string, model?: string):
+      Promise<{ success: boolean; revisedText?: string; error?: string }> {
+      return ipcRenderer.invoke('claude:revise-chunk', chunkId, beforeText, currentAfterText, instruction, model);
+    },
     listMcps(): Promise<{ name: string; source?: string }[]> {
       return ipcRenderer.invoke('claude:list-mcps');
     },
@@ -104,6 +119,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         success: boolean;
         content?: string;
         error?: string;
+        proposal?: { originalContent: string; proposedContent: string; docPath: string } | null;
       }) => void,
     ): () => void {
       const handler = (
@@ -113,6 +129,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
           success: boolean;
           content?: string;
           error?: string;
+          proposal?: { originalContent: string; proposedContent: string; docPath: string } | null;
         },
       ) => {
         callback(data);

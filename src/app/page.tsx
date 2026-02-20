@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkFrontmatter from 'remark-frontmatter';
@@ -8,6 +8,7 @@ import rehypeRaw from 'rehype-raw';
 import dynamic from 'next/dynamic';
 
 import { useDocument } from './hooks/useDocument';
+import { Comment } from './types';
 import { useComments } from './hooks/useComments';
 import { useChangelog } from './hooks/useChangelog';
 import { useClaude } from './hooks/useClaude';
@@ -20,6 +21,7 @@ import Sidebar from './components/Sidebar';
 import EditsTab from './components/tabs/EditsTab';
 import ChatTab from './components/tabs/ChatTab';
 import TableOfContentsTab from './components/tabs/TableOfContentsTab';
+import HistoryTab from './components/tabs/HistoryTab';
 import CommentTooltip from './components/CommentTooltip';
 import CommentDrawer from './components/CommentDrawer';
 import FileBrowser from './components/FileBrowser';
@@ -27,6 +29,8 @@ import NewDocumentModal from './components/NewDocumentModal';
 import DocumentInfo from './components/DocumentInfo';
 import SearchBar from './components/SearchBar';
 import InlineDiffView from './components/InlineDiffView';
+import { computeChunkedDiff } from '../lib/diff';
+import type { DiffChunk } from '../lib/diff';
 import FileExplorer from './components/FileExplorer';
 import MultiAgentProgress from './components/MultiAgentProgress';
 
@@ -40,16 +44,24 @@ export default function Home() {
   // TipTap editor ref (exposed by RichEditor via onEditorReady callback)
   const editorRef = useRef<any>(null);
 
-  // Thin wrappers for edit mode changes (used in place of doc.* for consistency)
-  const toggleEditMode = useCallback(() => doc.toggleEditMode(), [doc.toggleEditMode]);
+  // Thin wrappers for edit mode changes — save scroll fraction BEFORE state change
+  const pendingScrollFraction = useRef<number | null>(null);
+  const saveScrollFraction = useCallback(() => {
+    if (mainRef.current) {
+      const { scrollTop, scrollHeight, clientHeight } = mainRef.current;
+      const maxScroll = scrollHeight - clientHeight;
+      pendingScrollFraction.current = maxScroll > 0 ? scrollTop / maxScroll : 0;
+    }
+  }, []);
+  const toggleEditMode = useCallback(() => { saveScrollFraction(); doc.toggleEditMode(); }, [doc.toggleEditMode, saveScrollFraction]);
   const saveDocument = useCallback(() => {
     const html = editorRef.current?.getHTML();
     if (!html) { console.warn('saveDocument: editor returned empty HTML, skipping save'); return; }
     doc.saveDocument(html);
   }, [doc.saveDocument]);
-  const setIsEditMode = useCallback((mode: boolean) => doc.setIsEditMode(mode), [doc.setIsEditMode]);
+  const setIsEditMode = useCallback((mode: boolean) => { saveScrollFraction(); doc.setIsEditMode(mode); }, [doc.setIsEditMode, saveScrollFraction]);
 
-  const [activeTab, setActiveTab] = useState<'toc' | 'edits' | 'chat'>('edits');
+  const [activeTab, setActiveTab] = useState<'toc' | 'edits' | 'chat' | 'history'>('edits');
   const [showFileBrowser, setShowFileBrowser] = useState(false);
   const [showNewDocModal, setShowNewDocModal] = useState(false);
   const [recentFiles, setRecentFiles] = useState<string[]>([]);
@@ -60,6 +72,12 @@ export default function Home() {
   const [showSavedFlash, setShowSavedFlash] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsVaultRoot, setSettingsVaultRoot] = useState('');
+
+  // History tab state
+  const [historyCommits, setHistoryCommits] = useState<Array<{ hash: string; shortHash: string; message: string; date: string; author: string }>>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historySelectedCommit, setHistorySelectedCommit] = useState<{ hash: string; shortHash: string; message: string; date: string; author: string } | null>(null);
+  const [historyDiffChunks, setHistoryDiffChunks] = useState<DiffChunk[] | null>(null);
 
   // Google Docs share state
   const [shareStatus, setShareStatus] = useState<'idle' | 'sharing' | 'done' | 'error' | 'confirm'>('idle');
@@ -120,6 +138,7 @@ export default function Home() {
     chatDraft: string;
     beforeMarkdown: string | null;
     afterMarkdown: string | null;
+    diffChunks: any[];
     claudeOutput: string;
     streamOutput: string;
     showLastOutput: boolean;
@@ -189,36 +208,32 @@ export default function Home() {
     }
   }, [shareStatus]);
 
-  // When entering/exiting edit mode, preserve scroll position via fraction
+  // When entering/exiting edit mode, restore scroll position from fraction saved before state change
   const prevEditMode = useRef(doc.isEditMode);
-  const editScrollFraction = useRef(0);
-  useEffect(() => {
-    if (!prevEditMode.current && doc.isEditMode) {
-      // Entering edit mode — save scroll fraction
-      if (mainRef.current) {
-        const { scrollTop, scrollHeight, clientHeight } = mainRef.current;
-        const maxScroll = scrollHeight - clientHeight;
-        editScrollFraction.current = maxScroll > 0 ? scrollTop / maxScroll : 0;
+  useLayoutEffect(() => {
+    if (prevEditMode.current !== doc.isEditMode && pendingScrollFraction.current !== null) {
+      const fraction = pendingScrollFraction.current;
+      pendingScrollFraction.current = null;
+
+      if (prevEditMode.current && !doc.isEditMode) {
+        // Exiting edit mode — restore vim cursor
+        const idx = editorBlockRef.current;
+        vim.setBlockIndex(idx);
+        vim.setWordIndex(0);
+        vim.exitInsertMode();
       }
-    } else if (prevEditMode.current && !doc.isEditMode) {
-      // Exiting edit mode — restore scroll fraction after re-render
-      const fraction = editScrollFraction.current;
-      const idx = editorBlockRef.current;
-      vim.setBlockIndex(idx);
-      vim.setWordIndex(0);
-      vim.exitInsertMode();
+
+      // Restore scroll position after layout settles
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (mainRef.current) {
-            const { scrollHeight, clientHeight } = mainRef.current;
-            const maxScroll = scrollHeight - clientHeight;
-            mainRef.current.scrollTop = fraction * maxScroll;
-          }
-        });
+        if (mainRef.current) {
+          const { scrollHeight, clientHeight } = mainRef.current;
+          const maxScroll = scrollHeight - clientHeight;
+          mainRef.current.scrollTop = fraction * maxScroll;
+        }
       });
     }
     prevEditMode.current = doc.isEditMode;
-  }, [doc.isEditMode, getBlocks]);
+  }, [doc.isEditMode]);
 
   // Block cursor and word cursor effects are now handled inside useVim
 
@@ -416,7 +431,12 @@ export default function Home() {
     setActiveTab,
   });
 
-  const chat = useChat(doc.filePath, claude.model);
+  const handleProposal = useCallback((original: string, proposed: string) => {
+    claude.clearProposals();
+    claude.setProposalFromChat(original, proposed);
+  }, [claude.clearProposals, claude.setProposalFromChat]);
+
+  const chat = useChat(doc.filePath, claude.model, handleProposal);
   const chatDraftRef = useRef('');
 
   // Initial load — wait until path restoration finishes
@@ -452,8 +472,11 @@ export default function Home() {
 
   // Restore scroll position and per-document state after document loads
   const prevLoadingRef = useRef(doc.isLoading);
+  const prevFilePathRef = useRef(doc.filePath);
   useEffect(() => {
     if (prevLoadingRef.current && !doc.isLoading) {
+      const filePathChanged = prevFilePathRef.current !== doc.filePath;
+
       // Restore scroll
       const savedScroll = scrollPositionMap.current.get(doc.filePath);
       if (savedScroll !== undefined) {
@@ -463,17 +486,24 @@ export default function Home() {
           }
         });
       }
-      // Restore per-document state
-      const cached = perDocCacheRef.current.get(doc.filePath);
-      if (cached) {
-        chat.restoreState(cached.chatActiveSessionId, cached.chatMessages, cached.chatSessions);
-        chatDraftRef.current = cached.chatDraft;
-        claude.restoreState(cached.beforeMarkdown, cached.afterMarkdown, cached.claudeOutput, cached.streamOutput, cached.showLastOutput ?? false);
-        setComments(cached.comments);
-        changelog.setChangelogs(cached.changelogs);
+      // Only restore/clear per-document state when switching to a different document.
+      // loadDocument() for the same doc (e.g. after edit completion) should NOT clear diff state.
+      if (filePathChanged) {
+        const cached = perDocCacheRef.current.get(doc.filePath);
+        if (cached) {
+          chat.restoreState(cached.chatActiveSessionId, cached.chatMessages, cached.chatSessions);
+          chatDraftRef.current = cached.chatDraft;
+          claude.restoreState(cached.beforeMarkdown, cached.afterMarkdown, cached.claudeOutput, cached.streamOutput, cached.showLastOutput ?? false, cached.diffChunks);
+          setComments(cached.comments);
+          changelog.setChangelogs(cached.changelogs);
+        } else {
+          // No cached state — clear diff/proposal state so old doc's review view doesn't persist
+          claude.restoreState(null, null, '', '', false);
+        }
       }
     }
     prevLoadingRef.current = doc.isLoading;
+    prevFilePathRef.current = doc.filePath;
   }, [doc.isLoading, doc.filePath]);
 
   // Resolve vault root when file path changes — settings-configured root takes priority
@@ -494,6 +524,47 @@ export default function Home() {
       }
     };
     resolveVault();
+  }, [doc.filePath]);
+
+  // Load git history when History tab activates or file changes while on History tab
+  useEffect(() => {
+    if (activeTab !== 'history' || !doc.filePath) return;
+    const loadHistory = async () => {
+      if (!window.electronAPI?.git?.log) return;
+      setHistoryLoading(true);
+      setHistorySelectedCommit(null);
+      setHistoryDiffChunks(null);
+      try {
+        const result = await window.electronAPI.git.log(doc.filePath);
+        if (result.success && result.commits) {
+          setHistoryCommits(result.commits);
+        } else {
+          setHistoryCommits([]);
+        }
+      } catch {
+        setHistoryCommits([]);
+      }
+      setHistoryLoading(false);
+    };
+    loadHistory();
+  }, [activeTab, doc.filePath]);
+
+  const handleSelectHistoryCommit = useCallback(async (commit: { hash: string; shortHash: string; message: string; date: string; author: string }) => {
+    setHistorySelectedCommit(commit);
+    setHistoryDiffChunks(null);
+    if (!window.electronAPI?.git?.show) return;
+    try {
+      const [current, parent] = await Promise.all([
+        window.electronAPI.git.show(doc.filePath, commit.hash),
+        window.electronAPI.git.show(doc.filePath, commit.hash + '~1'),
+      ]);
+      const currentContent = current.success ? current.content! : '';
+      const parentContent = parent.success ? parent.content! : '';
+      const chunks = computeChunkedDiff(parentContent, currentContent);
+      setHistoryDiffChunks(chunks);
+    } catch {
+      setHistoryDiffChunks([]);
+    }
   }, [doc.filePath]);
 
   // Load chat sessions when document changes
@@ -524,6 +595,7 @@ export default function Home() {
         chatDraft: chatDraftRef.current,
         beforeMarkdown: claude.beforeMarkdown,
         afterMarkdown: claude.afterMarkdown,
+        diffChunks: claude.diffChunks,
         claudeOutput: claude.claudeOutput,
         streamOutput: claude.streamOutput,
         showLastOutput: claude.showLastOutput,
@@ -532,7 +604,7 @@ export default function Home() {
       });
     }
     setActiveTabIndex(index);
-  }, [tabs, activeTabIndex, chat.activeSessionId, chat.messages, chat.sessions, claude.beforeMarkdown, claude.afterMarkdown, claude.claudeOutput, claude.streamOutput, claude.showLastOutput, comments, changelog.changelogs]);
+  }, [tabs, activeTabIndex, chat.activeSessionId, chat.messages, chat.sessions, claude.beforeMarkdown, claude.afterMarkdown, claude.diffChunks, claude.claudeOutput, claude.streamOutput, claude.showLastOutput, comments, changelog.changelogs]);
 
   const handleCloseTab = useCallback((index: number) => {
     if (tabs.length <= 1) return;
@@ -687,6 +759,16 @@ export default function Home() {
         setShowFileBrowser(true);
       }
 
+      // Cmd+T: new empty tab
+      if (e.metaKey && e.key === 't') {
+        e.preventDefault();
+        setTabs(prev => {
+          const updated = [...prev, { path: '', title: 'New Tab' }];
+          setActiveTabIndex(updated.length - 1);
+          return updated;
+        });
+      }
+
       if (e.metaKey && e.key === 'n') {
         e.preventDefault();
         setShowNewDocModal(true);
@@ -812,6 +894,13 @@ export default function Home() {
     if (!api?.onMenuAction) return;
     const cleanup = api.onMenuAction((action: string, ...args: unknown[]) => {
       switch (action) {
+        case 'new-tab':
+          setTabs(prev => {
+            const updated = [...prev, { path: '', title: 'New Tab' }];
+            setActiveTabIndex(updated.length - 1);
+            return updated;
+          });
+          break;
         case 'new-document': setShowNewDocModal(true); break;
         case 'open-file': setShowFileBrowser(true); break;
         case 'open-path':
@@ -941,6 +1030,108 @@ export default function Home() {
       window.getSelection()?.removeAllRanges();
     }
   };
+
+  const handleNavigateToComment = useCallback((comment: Comment) => {
+    const article = articleRef.current;
+    if (!article) return;
+
+    const flashElement = (el: HTMLElement) => {
+      el.style.transition = 'outline 0.15s, outline-offset 0.15s';
+      el.style.outline = '3px solid var(--color-accent)';
+      el.style.outlineOffset = '2px';
+      setTimeout(() => {
+        el.style.outline = '';
+        el.style.outlineOffset = '';
+      }, 1200);
+    };
+
+    // 1. Find mark by data-comment-text attribute (precise match for active comments)
+    const mark = article.querySelector(`mark[data-comment-text="${CSS.escape(comment.selectedText)}"]`) as HTMLElement | null;
+    if (mark) {
+      mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      flashElement(mark);
+      return;
+    }
+
+    // 2. Fallback: find mark by partial text match
+    const marks = article.querySelectorAll('mark.comment-highlight');
+    for (const m of marks) {
+      if (m.textContent && m.textContent.length > 3 && comment.selectedText.includes(m.textContent)) {
+        (m as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        flashElement(m as HTMLElement);
+        return;
+      }
+    }
+
+    // 3. Search raw text in the article (exact or first 50 chars)
+    const searchSlice = comment.selectedText.slice(0, 50);
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    let node: Text | null;
+    while ((node = walker.nextNode() as Text | null)) {
+      if (node.textContent && node.textContent.includes(searchSlice)) {
+        const el = node.parentElement;
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          flashElement(el);
+        }
+        return;
+      }
+    }
+
+    // 4. Fuzzy: try first few words of the selected text (handles edited text)
+    const firstWords = comment.selectedText.split(/\s+/).slice(0, 4).join(' ');
+    if (firstWords.length >= 8) {
+      const walker2 = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+      while ((node = walker2.nextNode() as Text | null)) {
+        if (node.textContent && node.textContent.includes(firstWords)) {
+          const el = node.parentElement;
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            flashElement(el);
+          }
+          return;
+        }
+      }
+    }
+
+    // 5. Try matching fragments split on punctuation
+    const fullText = article.textContent || '';
+    const fragments = comment.selectedText.split(/[.,!?;]/).filter(f => f.trim().length > 10);
+    for (const frag of fragments) {
+      const trimmed = frag.trim();
+      if (fullText.includes(trimmed)) {
+        const walker3 = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+        let offset = 0;
+        while ((node = walker3.nextNode() as Text | null)) {
+          offset += node.textContent?.length || 0;
+          if (offset >= fullText.indexOf(trimmed)) {
+            const el = node.parentElement;
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              flashElement(el);
+            }
+            return;
+          }
+        }
+      }
+    }
+
+    // 6. Last resort: navigate by section heading (stored in enriched changelog)
+    const sectionHeading = (comment as any).sectionHeading;
+    if (sectionHeading) {
+      const headings = article.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      for (const h of headings) {
+        if (h.textContent?.trim() === sectionHeading) {
+          // Scroll to the element AFTER the heading (the section content)
+          const next = h.nextElementSibling as HTMLElement | null;
+          const target = next || (h as HTMLElement);
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          flashElement(target);
+          return;
+        }
+      }
+    }
+  }, []);
 
   const openFileBrowser = useCallback(() => {
     setShowFileBrowser(true);
@@ -1098,6 +1289,28 @@ export default function Home() {
 
   const articleRef = useRef<HTMLElement>(null);
 
+  // Memoize ReactMarkdown output so React doesn't reconcile the article DOM
+  // on every parent re-render (which would wipe out our <mark> highlights)
+  const memoizedMarkdown = useMemo(() => (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkFrontmatter]}
+      rehypePlugins={[rehypeRaw]}
+      components={{
+        img: ({ src, alt, ...props }) => {
+          if (!src || typeof src !== 'string') return null;
+          let resolvedSrc = src;
+          if (!src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('/api/')) {
+            const docDir = doc.filePath.substring(0, doc.filePath.lastIndexOf('/'));
+            resolvedSrc = `/api/image?path=${encodeURIComponent(docDir + '/' + src)}`;
+          }
+          return <img src={resolvedSrc} alt={alt || ''} {...props} style={{ maxWidth: '100%' }} />;
+        },
+      }}
+    >
+      {processWikiLinks(doc.markdown)}
+    </ReactMarkdown>
+  ), [doc.markdown, doc.filePath]);
+
   // Highlight text in the rendered DOM for:
   // 1. Saved comments (while they exist)
   // 2. Active selection (while comment drawer is open)
@@ -1134,22 +1347,25 @@ export default function Home() {
 
     if (textsToHighlight.length === 0) return;
 
-    // Build a flat map of text nodes with character offsets for cross-node matching
-    const textNodes: { node: Text; start: number; end: number }[] = [];
-    let offset = 0;
-    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
-    let tNode: Text | null;
-    while ((tNode = walker.nextNode() as Text | null)) {
-      const len = tNode.textContent?.length || 0;
-      textNodes.push({ node: tNode, start: offset, end: offset + len });
-      offset += len;
-    }
-
-    const fullText = textNodes.map(tn => tn.node.textContent).join('');
     const matched = new Set<string>();
 
+    // Process each highlight independently — rebuild text node map each time
+    // because surroundContents splits text nodes and invalidates the map
     for (const { text, tooltip, cssClass } of textsToHighlight) {
       if (matched.has(text)) continue;
+
+      // Rebuild text node map fresh for each highlight
+      const textNodes: { node: Text; start: number; end: number }[] = [];
+      let offset = 0;
+      const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+      let tNode: Text | null;
+      while ((tNode = walker.nextNode() as Text | null)) {
+        const len = tNode.textContent?.length || 0;
+        textNodes.push({ node: tNode, start: offset, end: offset + len });
+        offset += len;
+      }
+
+      const fullText = textNodes.map(tn => tn.node.textContent).join('');
       const idx = fullText.indexOf(text);
       if (idx < 0) continue;
       matched.add(text);
@@ -1168,6 +1384,7 @@ export default function Home() {
         const mark = document.createElement('mark');
         mark.className = 'comment-highlight' + (cssClass ? ' ' + cssClass : '');
         mark.title = tooltip;
+        mark.dataset.commentText = text;
 
         const range = document.createRange();
         range.setStart(tn.node, markStart);
@@ -1175,8 +1392,6 @@ export default function Home() {
 
         try {
           range.surroundContents(mark);
-          // surroundContents splits the text node, so update our map
-          // Re-walking would be expensive; for now just continue
         } catch {
           // If surroundContents fails (rare), skip this segment
         }
@@ -1482,7 +1697,45 @@ export default function Home() {
                 />
               </div>
               <div style={{ display: doc.isEditMode ? 'none' : 'block' }}>
-                {claude.beforeMarkdown && claude.afterMarkdown && claude.diffChunks.length > 0 ? (
+                {historySelectedCommit && historyDiffChunks ? (
+                  <div>
+                    <div
+                      className="flex items-center gap-3 mb-6 px-4 py-3 rounded-lg"
+                      style={{
+                        background: 'var(--color-surface)',
+                        border: '1px solid var(--color-border)',
+                      }}
+                    >
+                      <button
+                        onClick={() => { setHistorySelectedCommit(null); setHistoryDiffChunks(null); }}
+                        className="text-xs px-3 py-1.5 rounded-md font-medium transition-colors flex-shrink-0"
+                        style={{
+                          color: 'var(--color-ink-faded)',
+                          background: 'var(--color-surface-raised)',
+                          border: '1px solid var(--color-border)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        &larr; Back to document
+                      </button>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span className="text-sm font-medium" style={{ color: 'var(--color-ink)' }}>
+                          {historySelectedCommit.message}
+                        </span>
+                        <span className="text-xs ml-2" style={{ color: 'var(--color-ink-faded)' }}>
+                          {historySelectedCommit.shortHash}
+                        </span>
+                      </div>
+                    </div>
+                    {historyDiffChunks.length === 0 ? (
+                      <div style={{ padding: '32px 0', textAlign: 'center', color: 'var(--color-ink-faded)', fontSize: '14px' }}>
+                        No changes in this commit
+                      </div>
+                    ) : (
+                      <InlineDiffView chunks={historyDiffChunks} readOnly />
+                    )}
+                  </div>
+                ) : claude.beforeMarkdown && claude.afterMarkdown && claude.diffChunks.length > 0 ? (
                   <InlineDiffView
                     chunks={claude.diffChunks}
                     onApproveChunk={claude.approveChunk}
@@ -1493,6 +1746,7 @@ export default function Home() {
                       await claude.finalizeChunks();
                       comments.filter(c => c.status === 'applied').forEach(c => removeComment(c.id));
                     }}
+                    onReviseChunk={claude.reviseChunk}
                     stats={claude.diffChunkStats}
                   />
                 ) : (
@@ -1510,24 +1764,7 @@ export default function Home() {
                       vim.handleArticleClick(e);
                     }}
                   >
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkFrontmatter]}
-                      rehypePlugins={[rehypeRaw]}
-                      components={{
-                        img: ({ src, alt, ...props }) => {
-                          if (!src || typeof src !== 'string') return null;
-                          // Resolve relative paths through the image API
-                          let resolvedSrc = src;
-                          if (!src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('/api/')) {
-                            const docDir = doc.filePath.substring(0, doc.filePath.lastIndexOf('/'));
-                            resolvedSrc = `/api/image?path=${encodeURIComponent(docDir + '/' + src)}`;
-                          }
-                          return <img src={resolvedSrc} alt={alt || ''} {...props} style={{ maxWidth: '100%' }} />;
-                        },
-                      }}
-                    >
-                      {processWikiLinks(doc.markdown)}
-                    </ReactMarkdown>
+                    {memoizedMarkdown}
                   </article>
                 )}
               </div>
@@ -1651,8 +1888,9 @@ export default function Home() {
               expandedEntryId={changelog.expandedEntryId}
               setExpandedEntryId={changelog.setExpandedEntryId}
               onClearChangelogs={() => changelog.clearChangelogs(doc.filePath)}
+              onNavigateToComment={handleNavigateToComment}
             />
-          ) : (
+          ) : activeTab === 'chat' ? (
             <ChatTab
               sessions={chat.sessions}
               activeSessionId={chat.activeSessionId}
@@ -1672,6 +1910,16 @@ export default function Home() {
               vaultRoot={vaultRoot}
               model={claude.model}
               setModel={claude.setModel}
+            />
+          ) : (
+            <HistoryTab
+              commits={historyCommits}
+              isLoading={historyLoading}
+              selectedCommit={historySelectedCommit}
+              onSelectCommit={handleSelectHistoryCommit}
+              onBack={() => { setHistorySelectedCommit(null); setHistoryDiffChunks(null); }}
+              isElectron={!!window.electronAPI?.git}
+              isDiffLoading={!!historySelectedCommit && !historyDiffChunks}
             />
           )}
         </Sidebar>}
@@ -1705,6 +1953,7 @@ export default function Home() {
         show={showFileBrowser}
         filePath={doc.filePath}
         recentFiles={recentFiles}
+        vaultRoot={vaultRoot}
         onSelectFile={handleSelectFile}
         onClose={() => setShowFileBrowser(false)}
       />
