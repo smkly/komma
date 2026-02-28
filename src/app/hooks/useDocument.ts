@@ -97,6 +97,13 @@ export function useDocument() {
         return `![${alt}](${src})`;
       }
     });
+    // Convert <mark> back to ==highlighted== markdown syntax
+    service.addRule('mark', {
+      filter: 'mark',
+      replacement: function(content) {
+        return '==' + content + '==';
+      }
+    });
     return service;
   });
 

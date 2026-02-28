@@ -7,6 +7,7 @@ import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
 import Underline from '@tiptap/extension-underline';
+import Highlight from '@tiptap/extension-highlight';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import ImageNodeView from './ImageNodeView';
@@ -89,6 +90,7 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
       TableHeader,
       TableCell,
       Underline,
+      Highlight,
       Link.configure({ openOnClick: false }),
       Image.extend({
         addAttributes() {
@@ -222,6 +224,12 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
         return false;
       },
       handleKeyDown: (view, event) => {
+        // Cmd+Shift+H toggles highlight
+        if (event.key === 'h' && event.metaKey && event.shiftKey) {
+          event.preventDefault();
+          editor?.chain().focus().toggleHighlight().run();
+          return true;
+        }
         // jk escape sequence: j then k within 200ms exits edit mode
         if (event.key === 'j') {
           jkTimestampRef.current = Date.now();
@@ -407,6 +415,16 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
                 <path d="M17.3 4.9c-2.3-.6-4.4-1-6.2-.9-2.7 0-5.3.7-5.3 3.6 0 1.5 1.1 2.5 3.3 3.1"/>
                 <line x1="4" y1="12" x2="20" y2="12"/>
                 <path d="M17.3 13.1c.9.4 1.7 1.1 1.7 2.3 0 2.9-2.7 3.6-5.3 3.6-2.3 0-4.7-.5-6.7-1.5"/>
+              </svg>
+            </BubbleButton>
+            <BubbleButton
+              onClick={() => editor.chain().focus().toggleHighlight().run()}
+              isActive={editor.isActive('highlight')}
+              title="Highlight (⌘⇧H)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
               </svg>
             </BubbleButton>
             <BubbleButton

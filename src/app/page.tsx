@@ -1524,6 +1524,11 @@ export default function Home() {
     return md.replace(/\[\[([^\]]+)\]\]/g, '<a class="wiki-link" data-wiki="$1" href="#">$1</a>');
   }, []);
 
+  // Pre-process ==highlighted text== into <mark> tags before rendering
+  const processHighlights = useCallback((md: string): string => {
+    return md.replace(/==([^=\n]+)==/g, '<mark>$1</mark>');
+  }, []);
+
   const articleRef = useRef<HTMLElement>(null);
 
   // Memoize ReactMarkdown output so React doesn't reconcile the article DOM
@@ -1544,7 +1549,7 @@ export default function Home() {
         },
       }}
     >
-      {processWikiLinks(doc.markdown)}
+      {processHighlights(processWikiLinks(doc.markdown))}
     </ReactMarkdown>
   ), [doc.markdown, doc.filePath]);
 
@@ -2154,7 +2159,7 @@ export default function Home() {
               className="prose prose-editorial max-w-none"
             >
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkFrontmatter]} rehypePlugins={[rehypeRaw]}>
-                {processWikiLinks(splitPaneMarkdown)}
+                {processHighlights(processWikiLinks(splitPaneMarkdown))}
               </ReactMarkdown>
             </article>
             </div>
