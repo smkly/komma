@@ -11,6 +11,11 @@ cask "komma" do
 
   app "Komma.app"
 
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-cr", "#{appdir}/Komma.app"]
+  end
+
   zap trash: [
     "~/.komma",
     "~/Library/Application Support/Komma",
