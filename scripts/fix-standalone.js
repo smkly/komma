@@ -1,6 +1,7 @@
 // Post-build fixups for Next.js standalone output.
 // 1. Copy next-server app-route files (existing fix)
 // 2. Copy sql.js dist into the hashed node_modules path Turbopack creates
+// 3. Remove sharp native binaries (optional for Next.js, breaks universal builds)
 
 const fs = require('fs');
 const path = require('path');
@@ -41,4 +42,11 @@ if (fs.existsSync(regularSqlJs)) {
     fs.copyFileSync(path.join(srcDist, file), path.join(dstDist, file));
   }
   console.log(`Copied sql.js dist -> ${dstDist}`);
+}
+
+// --- Fix 3: Remove sharp native binaries (breaks universal merge) ---
+const standaloneNM = path.join('.next/standalone/node_modules/@img');
+if (fs.existsSync(standaloneNM)) {
+  fs.rmSync(standaloneNM, { recursive: true, force: true });
+  console.log('Removed @img/sharp native binaries from standalone');
 }

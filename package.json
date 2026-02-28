@@ -46,7 +46,10 @@
     "productName": "Komma",
     "mac": {
       "category": "public.app-category.productivity",
-      "target": "dmg",
+      "target": {
+        "target": "dmg",
+        "arch": ["universal"]
+      },
       "icon": "build/icon.icns"
     },
     "files": [
