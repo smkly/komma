@@ -7,7 +7,7 @@ A markdown document editor with AI editing, inline diff review, and git history 
 ### Install with Homebrew (recommended)
 
 ```bash
-brew install --cask komma-app/komma/komma
+brew install --cask 0xSmick/komma/komma
 ```
 
 ### Install from source

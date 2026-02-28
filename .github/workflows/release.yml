@@ -44,7 +44,7 @@ jobs:
             ## Install
 
             ```bash
-            brew install --cask komma-app/komma/komma
+            brew install --cask 0xSmick/komma/komma
             ```
 
             Or download `${{ steps.sha.outputs.dmg_name }}` below.

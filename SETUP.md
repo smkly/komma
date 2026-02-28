@@ -3,7 +3,7 @@
 ## Install with Homebrew (recommended)
 
 ```bash
-brew install --cask komma-app/komma/komma
+brew install --cask 0xSmick/komma/komma
 ```
 
 Then install the Claude CLI (see below) for AI features.
