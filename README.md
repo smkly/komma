@@ -1,17 +1,17 @@
 # Komma
 
-**A writing app where AI is your editor, not your author.**
+**A markdown editor with a built-in writing partner.**
 
-Komma is a native macOS markdown editor built for writers who want Claude as a collaborator — not a replacement. Select text, leave comments, and let Claude suggest edits you can accept or reject line-by-line. Every change is tracked with full version history.
+Komma is a native macOS editor for people who write in markdown. Leave comments on your own text, and Claude will suggest edits you can accept or reject line-by-line — like track changes with a co-editor who actually reads the whole document.
 
 ## Why Komma
 
-Most AI writing tools generate text for you. Komma takes a different approach: **you write, AI edits**. Think of it like track changes with a brilliant co-editor who understands your entire document.
+Writing tools either do too much or too little. Komma stays out of your way until you ask for help.
 
-- Leave inline comments on any selection, then send them to Claude for targeted rewrites
-- Review every AI suggestion as a diff — accept, reject, or revise per chunk
-- Chat with Claude about your document with full context awareness
-- Every save and edit is versioned — roll back to any point in time
+- Highlight text, leave a note, get a rewrite suggestion — accept or reject each change
+- Ask questions about your document in the chat tab
+- Every save is versioned — roll back to any point
+- It's just markdown files on your filesystem
 
 ## Install
 
@@ -20,7 +20,7 @@ brew tap 0xSmick/komma
 brew install --cask komma
 ```
 
-Requires the [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) for AI features (uses your Claude Max subscription — no API key needed):
+Requires the [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) for editing features (uses your Claude Max subscription — no API key needed):
 
 ```bash
 npm install -g @anthropic-ai/claude-code
@@ -29,22 +29,22 @@ claude   # login once
 
 ## How It Works
 
-1. **Write** in a clean markdown editor with optional vim keybindings
-2. **Comment** — select text, hit `Cmd+K` to leave edit instructions
+1. **Write** in a clean markdown editor (vim keybindings optional)
+2. **Comment** — select text, hit `Cmd+K`, leave a note like "make this clearer"
 3. **Send** — `Cmd+Enter` sends your comments to Claude
-4. **Review** — inline diffs appear with accept/reject controls per chunk
-5. **Chat** — open the chat tab for conversational editing with full document context
+4. **Review** — suggested edits appear inline as diffs, accept or reject each one
+5. **Chat** — ask questions or discuss edits in the sidebar
 
 ## Features
 
 | Feature | Details |
 |---------|---------|
-| Inline AI edits | Comment-driven editing with per-chunk diff review |
-| AI chat | Conversational editing with full document context |
-| Version history | Every save and edit tracked, restore any version |
-| Git integration | Auto-commit on save, push to GitHub from the app |
+| Inline editing | Leave comments, get suggested rewrites, accept/reject each change |
+| Chat | Ask questions or discuss your document in the sidebar |
+| Version history | Every save tracked with timestamps, restore any version |
+| Git built in | Auto-commits on save, push to GitHub from the app |
 | Vault context | `@vault` gives Claude awareness of all your documents |
-| Google Docs sync | Share and pull comments back (optional, bring your own OAuth) |
+| Google Docs | Share documents and pull comments back (optional) |
 | Split panes | View two documents side by side |
 | File explorer | Sidebar tree + fuzzy finder (`Cmd+P`) |
 | Vim mode | Toggle in status bar |
@@ -89,4 +89,4 @@ src/lib/db.ts          SQLite (sql.js) — comments, history, chat
 
 ## License
 
-MIT
+AGPL-3.0
