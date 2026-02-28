@@ -57,17 +57,19 @@ function backupFile(filePath: string): string | null {
 
 let mainWindow: BrowserWindow | null = null;
 let nextServer: ChildProcess | null = null;
-let currentEdit: ReturnType<typeof spawnClaude> | null = null;
-let currentEditDocPath: string | null = null;
+interface EditState {
+  process: ReturnType<typeof spawnClaude>;
+  accumulatedText: string;
+  proposalPath: string | null;
+  originalContent: string | null;
+}
+const activeEdits = new Map<string, EditState>();
 let currentChat: ReturnType<typeof spawnClaude> | null = null;
 let currentChatDocPath: string | null = null;
 let serverPort: number | null = null;
-let accumulatedEditText = '';
 let accumulatedChatText = '';
 let currentChatProposalPath: string | null = null;
 let currentChatOriginalContent: string | null = null;
-let currentEditProposalPath: string | null = null;
-let currentEditOriginalContent: string | null = null;
 let pendingOpenFile: string | null = process.env.KOMMA_OPEN_FILE || null;
 
 function findFreePort(): Promise<number> {
@@ -185,7 +187,7 @@ async function startNextServer(port: number): Promise<void> {
 
 function createWindow(port: number) {
   mainWindow = new BrowserWindow({
-    title: 'Komma',
+    title: 'komma',
     width: 1200,
     height: 800,
     icon: path.join(__dirname, '..', 'build', 'icon.iconset', 'icon_256x256.png'),
@@ -618,14 +620,15 @@ function registerIpcHandlers() {
   ipcMain.handle(
     'claude:send-edit',
     async (_event, prompt: string, filePath: string, model?: string, refs?: { docs: string[]; mcps: string[]; vault?: boolean; architecture?: boolean; skills?: string[] }) => {
-      if (currentEdit) {
-        currentEdit.onData(() => {});
-        currentEdit.onComplete(() => {});
-        currentEdit.onError(() => {});
-        currentEdit.kill();
-        currentEdit = null;
+      // Kill existing edit for this same file (re-run scenario)
+      const existing = activeEdits.get(filePath);
+      if (existing) {
+        existing.process.onData(() => {});
+        existing.process.onComplete(() => {});
+        existing.process.onError(() => {});
+        existing.process.kill();
+        activeEdits.delete(filePath);
       }
-      currentEditDocPath = filePath;
 
       const useModel = model || readSettings().defaultModel || 'sonnet';
       const isFast = useModel !== 'opus';
@@ -645,23 +648,20 @@ function registerIpcHandlers() {
 
       // For existing files: snapshot original and create temp proposal copy
       let editTarget = filePath;
+      let proposalPath: string | null = null;
+      let originalContent: string | null = null;
       if (fileExists) {
         try {
-          const originalContent = fs.readFileSync(filePath, 'utf-8');
+          originalContent = fs.readFileSync(filePath, 'utf-8');
           const tmpDir = path.join(os.tmpdir(), 'komma-proposals');
           if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-          const proposalPath = path.join(tmpDir, `edit-proposal-${Date.now()}.md`);
+          proposalPath = path.join(tmpDir, `edit-proposal-${Date.now()}.md`);
           fs.writeFileSync(proposalPath, originalContent);
-          currentEditProposalPath = proposalPath;
-          currentEditOriginalContent = originalContent;
           editTarget = proposalPath;
         } catch {
-          currentEditProposalPath = null;
-          currentEditOriginalContent = null;
+          proposalPath = null;
+          originalContent = null;
         }
-      } else {
-        currentEditProposalPath = null;
-        currentEditOriginalContent = null;
       }
 
       // Replace real file path with edit target in the prompt to prevent
@@ -677,40 +677,47 @@ function registerIpcHandlers() {
         : (fileExists
             ? `Edit the file at ${editTarget}:\n\n${adjustedPrompt}${refContext}`
             : `${adjustedPrompt}${refContext}`);
-      accumulatedEditText = '';
-      currentEdit = spawnClaude(fullPrompt, {
-        allowedTools: ['Read', 'Edit', 'Write'],
-        maxTurns: isFast ? 5 : 10,
-        model: useModel,
-      });
 
-      currentEdit.onData((text) => {
-        accumulatedEditText += text;
+      const editState: EditState = {
+        process: spawnClaude(fullPrompt, {
+          allowedTools: ['Read', 'Edit', 'Write'],
+          maxTurns: isFast ? 5 : 10,
+          model: useModel,
+        }),
+        accumulatedText: '',
+        proposalPath,
+        originalContent,
+      };
+      activeEdits.set(filePath, editState);
+
+      editState.process.onData((text) => {
+        editState.accumulatedText += text;
         mainWindow?.webContents.send('claude:stream', {
           type: 'edit',
-          content: accumulatedEditText,
+          docPath: filePath,
+          content: editState.accumulatedText,
         });
       });
 
-      currentEdit.onComplete((result) => {
-        if (fileExists && currentEditProposalPath && currentEditOriginalContent) {
+      editState.process.onComplete((result) => {
+        if (fileExists && editState.proposalPath && editState.originalContent) {
           // Read proposed content from temp file
-          let proposedContent = currentEditOriginalContent;
-          try { proposedContent = fs.readFileSync(currentEditProposalPath, 'utf-8'); } catch {}
-          try { fs.unlinkSync(currentEditProposalPath); } catch {}
+          let proposedContent = editState.originalContent;
+          try { proposedContent = fs.readFileSync(editState.proposalPath, 'utf-8'); } catch {}
+          try { fs.unlinkSync(editState.proposalPath); } catch {}
 
           // Safety: restore original if the real file was somehow modified
           let realFileWasModified = false;
           try {
             const current = fs.readFileSync(filePath, 'utf-8');
-            if (current !== currentEditOriginalContent) {
+            if (current !== editState.originalContent) {
               realFileWasModified = true;
-              fs.writeFileSync(filePath, currentEditOriginalContent);
+              fs.writeFileSync(filePath, editState.originalContent);
             }
           } catch {}
 
-          const hasEdits = proposedContent !== currentEditOriginalContent;
-          console.log(`[claude:send-edit] complete: hasEdits=${hasEdits}, realFileWasModified=${realFileWasModified}, proposalPath=${currentEditProposalPath}`);
+          const hasEdits = proposedContent !== editState.originalContent;
+          console.log(`[claude:send-edit] complete: hasEdits=${hasEdits}, realFileWasModified=${realFileWasModified}, proposalPath=${editState.proposalPath}`);
           if (!hasEdits && realFileWasModified) {
             console.warn('[claude:send-edit] Claude edited the real file instead of the proposal file — changes were reverted');
           }
@@ -718,7 +725,8 @@ function registerIpcHandlers() {
             type: 'edit',
             success: true,
             content: result,
-            proposal: hasEdits ? { originalContent: currentEditOriginalContent, proposedContent, docPath: filePath } : null,
+            docPath: filePath,
+            proposal: hasEdits ? { originalContent: editState.originalContent, proposedContent, docPath: filePath } : null,
           });
         } else {
           // New file creation — verify it was written
@@ -727,28 +735,24 @@ function registerIpcHandlers() {
             type: 'edit',
             success: fileWritten,
             content: result,
+            docPath: filePath,
             error: fileWritten ? undefined : 'Claude completed but did not create the file',
           });
         }
-        currentEdit = null;
-        currentEditDocPath = null;
-        currentEditProposalPath = null;
-        currentEditOriginalContent = null;
+        activeEdits.delete(filePath);
       });
 
-      currentEdit.onError((error) => {
-        if (currentEditProposalPath) {
-          try { fs.unlinkSync(currentEditProposalPath); } catch {}
+      editState.process.onError((error) => {
+        if (editState.proposalPath) {
+          try { fs.unlinkSync(editState.proposalPath); } catch {}
         }
         mainWindow?.webContents.send('claude:complete', {
           type: 'edit',
           success: false,
+          docPath: filePath,
           error,
         });
-        currentEdit = null;
-        currentEditDocPath = null;
-        currentEditProposalPath = null;
-        currentEditOriginalContent = null;
+        activeEdits.delete(filePath);
       });
     },
   );
@@ -1072,11 +1076,21 @@ function registerIpcHandlers() {
     return null;
   });
 
-  ipcMain.handle('claude:cancel', async () => {
-    if (currentEdit) {
-      currentEdit.kill();
-      currentEdit = null;
-      currentEditDocPath = null;
+  ipcMain.handle('claude:cancel', async (_event, docPath?: string) => {
+    if (docPath) {
+      const edit = activeEdits.get(docPath);
+      if (edit) {
+        edit.process.kill();
+        if (edit.proposalPath) try { fs.unlinkSync(edit.proposalPath); } catch {}
+        activeEdits.delete(docPath);
+      }
+    } else {
+      // Cancel all active edits
+      for (const [key, edit] of activeEdits) {
+        edit.process.kill();
+        if (edit.proposalPath) try { fs.unlinkSync(edit.proposalPath); } catch {}
+        activeEdits.delete(key);
+      }
     }
     if (currentChat) {
       currentChat.kill();
@@ -1535,9 +1549,9 @@ function buildAppMenu() {
 
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: 'Komma',
+      label: 'komma',
       submenu: [
-        { role: 'about', label: 'About Komma' },
+        { role: 'about', label: 'About komma' },
         { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
@@ -1682,7 +1696,7 @@ function buildAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.name = 'Komma';
+app.name = 'komma';
 
 const PENDING_FILE = '/tmp/komma-open-file';
 
@@ -1760,9 +1774,9 @@ app.on('before-quit', () => {
   if (nextServer && !nextServer.killed) {
     nextServer.kill('SIGTERM');
   }
-  if (currentEdit) {
-    currentEdit.kill();
-    currentEditDocPath = null;
+  for (const [key, edit] of activeEdits) {
+    edit.process.kill();
+    activeEdits.delete(key);
   }
   if (currentChat) {
     currentChat.kill();

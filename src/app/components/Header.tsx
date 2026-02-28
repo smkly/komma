@@ -70,14 +70,14 @@ export default function Header({
           <div className="flex items-center gap-2.5">
             <img
               src={theme === 'dark' ? '/logo-dark.svg' : '/logo-light.svg'}
-              alt="Komma"
+              alt="komma"
               className="w-7 h-7 rounded-md"
             />
             <h1
               className="text-sm font-semibold tracking-tight"
               style={{ color: 'var(--color-ink)', fontFamily: 'var(--font-sans)' }}
             >
-              Komma
+              komma
             </h1>
           </div>
           <div className="flex items-center gap-1">

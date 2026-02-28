@@ -1,32 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 256 256" fill="none">
-  <!-- Background (optional). Remove this rect if you want transparency -->
-  <rect width="256" height="256" rx="56" fill="#08090E"/>
-
-  <!-- Mark -->
-  <g stroke="#6366F1" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">
-    <!-- Outer ring -->
-    <circle cx="128" cy="128" r="86"/>
-
-    <!-- "H" stems -->
-    <path d="M98 92V164"/>
-    <path d="M158 92V164"/>
-
-    <!-- Tiller-like crossbar -->
-    <path d="M94 128H162"/>
-
-    <!-- Handle cues (kept chunky for 16px legibility) -->
-    <path d="M78 128H84"/>
-    <path d="M172 128H178"/>
-
-    <!-- Subtle caret notch (text/cursor energy) -->
-    <path d="M128 116L128 140"/>
+  <rect width="256" height="256" rx="56" fill="#151722"/>
+  <g transform="translate(78,18) scale(0.0435,-0.0435) translate(0,-5060)" fill="#6E57FF">
+    <path d="M354 5050 c-11 -4 -33 -22 -47 -40 l-27 -32 0 -1336 c0 -1305 1 -1338 19 -1366 35 -53 46 -55 309 -56 272 0 292 4 318 65 12 29 14 236 14 1350 0 1448 4 1365 -62 1405 -31 19 -49 20 -268 19 -129 0 -244 -4 -256 -9z"/>
+    <path d="M1080 2805 l0 -875 155 0 c105 0 155 -3 155 -11 0 -24 -61 -250 -90 -334 -82 -238 -271 -560 -452 -770 -200 -232 -503 -500 -775 -683 -66 -44 -81 -69 -63 -102 52 -97 539 56 932 293 315 190 642 468 838 711 272 337 464 771 521 1176 19 135 16 401 -6 525 -69 399 -276 689 -596 839 -155 72 -321 106 -526 106 l-93 0 0 -875z"/>
   </g>
-
-  <!-- Soft glow (optional). Delete this group if you want pure flat monochrome -->
-  <g opacity="0.28" filter="url(#glow)">
-    <circle cx="128" cy="128" r="86" stroke="#6366F1" stroke-width="14"/>
+  <g transform="translate(78,18) scale(0.0435,-0.0435) translate(0,-5060)" fill="#6E57FF" opacity="0.25" filter="url(#glow)">
+    <path d="M354 5050 c-11 -4 -33 -22 -47 -40 l-27 -32 0 -1336 c0 -1305 1 -1338 19 -1366 35 -53 46 -55 309 -56 272 0 292 4 318 65 12 29 14 236 14 1350 0 1448 4 1365 -62 1405 -31 19 -49 20 -268 19 -129 0 -244 -4 -256 -9z"/>
+    <path d="M1080 2805 l0 -875 155 0 c105 0 155 -3 155 -11 0 -24 -61 -250 -90 -334 -82 -238 -271 -560 -452 -770 -200 -232 -503 -500 -775 -683 -66 -44 -81 -69 -63 -102 52 -97 539 56 932 293 315 190 642 468 838 711 272 337 464 771 521 1176 19 135 16 401 -6 525 -69 399 -276 689 -596 839 -155 72 -321 106 -526 106 l-93 0 0 -875z"/>
   </g>
-
   <defs>
     <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
       <feGaussianBlur stdDeviation="6" result="blur"/>

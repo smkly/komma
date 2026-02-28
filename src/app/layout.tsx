@@ -21,7 +21,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Komma",
+  title: "komma",
   description: "AI-powered spec editor for product managers",
   icons: {
     icon: "/favicon.svg",

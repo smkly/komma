@@ -1886,7 +1886,7 @@ export default function Home() {
                 <polyline points="10 9 9 9 8 9" />
               </svg>
               <div style={{ fontSize: '18px', fontWeight: 600, color: 'var(--color-ink)', marginBottom: '4px' }}>
-                Komma
+                komma
               </div>
               <div style={{ fontSize: '13px', marginBottom: '24px' }}>
                 Open a file to get started

@@ -250,7 +250,7 @@ export function startOAuthFlow(): Promise<TokenData> {
       }
 
       res.writeHead(200, { 'Content-Type': 'text/html' });
-      res.end('<html><body><h2>Authorized!</h2><p>You can close this window and return to Komma.</p></body></html>');
+      res.end('<html><body><h2>Authorized!</h2><p>You can close this window and return to komma.</p></body></html>');
 
       try {
         const tokens = await exchangeCodeForTokens(code, codeVerifier);
