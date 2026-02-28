@@ -1,17 +1,16 @@
 # Komma
 
-**A markdown editor with a built-in writing partner.**
+**An AI-first markdown editor for people who ship.**
 
-Komma is a native macOS editor for people who write in markdown. Leave comments on your own text, and Claude will suggest edits you can accept or reject line-by-line — like track changes with a co-editor who actually reads the whole document.
+Komma is a native macOS markdown editor built for product managers, founders, and operators who want Claude as a writing collaborator. Rich text editing, inline diffs, version history, and MCP integrations — all on top of plain markdown files.
 
-## Why Komma
+## What People Use It For
 
-Writing tools either do too much or too little. Komma stays out of your way until you ask for help.
-
-- Highlight text, leave a note, get a rewrite suggestion — accept or reject each change
-- Ask questions about your document in the chat tab
-- Every save is versioned — roll back to any point
-- It's just markdown files on your filesystem
+- **Meeting notes → action items** — drop a transcript from Otter or Fireflies via MCP, ask Claude to pull out decisions and next steps
+- **Analytics → reports** — pull data from Amplitude, Mixpanel, or your database via MCP, turn it into a weekly update or board memo
+- **Writing context files for agents** — draft ARCHITECTURE.md, PRDs, or system prompts with Claude helping you think through the details
+- **Product specs** — write the rough draft, leave comments like "flesh this out" or "add edge cases", review Claude's suggestions line-by-line
+- **Blog posts and updates** — write freely, then use inline editing to tighten prose without losing your voice
 
 ## Install
 
