@@ -5,6 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 interface Tab {
   path: string;
   title: string;
+  generating?: boolean;
 }
 
 interface TabBarProps {
@@ -76,15 +77,22 @@ export default function TabBar({ tabs, activeIndex, splitTabIndex, onSelectTab, 
                 }}
               />
             )}
+            {/* Generating spinner icon */}
+            {tab.generating && (
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="3" className="animate-spin" style={{ flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="10" opacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" />
+              </svg>
+            )}
             {/* Split indicator icon */}
-            {isSplit && !isActive && (
+            {isSplit && !isActive && !tab.generating && (
               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2.5" style={{ opacity: 0.6 }}>
                 <rect x="3" y="3" width="18" height="18" rx="2" />
                 <line x1="12" y1="3" x2="12" y2="21" />
               </svg>
             )}
-            <span className="truncate max-w-[160px]">{tab.title}</span>
-            {tabs.length > 1 && (
+            <span className="truncate max-w-[160px]" style={{ color: tab.generating ? 'var(--color-accent)' : undefined }}>{tab.title}</span>
+            {tabs.length > 1 && !tab.generating && (
               <span
                 className="ml-1 rounded hover:bg-black/10 transition-all flex items-center justify-center"
                 style={{

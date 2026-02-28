@@ -132,7 +132,7 @@ export default function Home() {
   }, []);
 
   // Document tab state
-  const [tabs, setTabs] = useState<{ path: string; title: string }[]>([
+  const [tabs, setTabs] = useState<{ path: string; title: string; generating?: boolean }[]>([
     { path: doc.filePath, title: doc.filePath ? (doc.filePath.split('/').pop() || 'Untitled') : 'Welcome' }
   ]);
   const [activeTabIndex, setActiveTabIndex] = useState(0);
@@ -1316,13 +1316,23 @@ export default function Home() {
       setActiveTabIndex(existingIdx);
     } else {
       const newTab = { path, title: path.split('/').pop() || 'Untitled' };
-      setTabs(prev => {
-        const updated = [...prev, newTab];
-        setActiveTabIndex(updated.length - 1);
-        return updated;
-      });
+      const newIndex = tabs.length;
+      setTabs(prev => [...prev, newTab]);
+      setActiveTabIndex(newIndex);
     }
   }, [tabs]);
+
+  const handleSelectFileRef = useRef(handleSelectFile);
+  useEffect(() => { handleSelectFileRef.current = handleSelectFile; }, [handleSelectFile]);
+
+  const loadDocumentRef = useRef(loadDocument);
+  useEffect(() => { loadDocumentRef.current = loadDocument; }, [loadDocument]);
+
+  const tabsRef = useRef(tabs);
+  useEffect(() => { tabsRef.current = tabs; }, [tabs]);
+
+  const activeTabIndexRef = useRef(activeTabIndex);
+  useEffect(() => { activeTabIndexRef.current = activeTabIndex; }, [activeTabIndex]);
 
   // File operations (rename, move, delete)
   const [moveFilePath, setMoveFilePath] = useState<string | null>(null);
@@ -1397,7 +1407,7 @@ export default function Home() {
     setMoveFilePath(null);
   }, [moveFilePath, doc.filePath, handleSelectFile]);
 
-  const [isCreatingDoc, setIsCreatingDoc] = useState(false);
+  const [generatingDocPaths, setGeneratingDocPaths] = useState<Set<string>>(new Set());
   const [multiAgentSections, setMultiAgentSections] = useState<Array<{ title: string; status: 'pending' | 'streaming' | 'complete' | 'error'; output: string }>>([]);
   const [isMultiAgent, setIsMultiAgent] = useState(false);
 
@@ -1415,8 +1425,22 @@ export default function Home() {
 
   const handleNewDocument = useCallback(async (filePath: string, prompt: string) => {
     setShowNewDocModal(false);
-    setIsCreatingDoc(true);
-    // Send to Claude to write the content — don't open the tab until the file exists
+
+    // Immediately create tab with generating flag and switch to it
+    const newTab = { path: filePath, title: filePath.split('/').pop() || 'Untitled', generating: true };
+    setTabs(prev => {
+      const idx = prev.findIndex(t => t.path === filePath);
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = { ...updated[idx], generating: true };
+        setActiveTabIndex(idx);
+        return updated;
+      }
+      setActiveTabIndex(prev.length);
+      return [...prev, newTab];
+    });
+    setGeneratingDocPaths(prev => new Set(prev).add(filePath));
+
     const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
     if (isElectron) {
       const api = window.electronAPI!;
@@ -1427,23 +1451,33 @@ export default function Home() {
         if (data.type !== 'edit') return; // ignore chat completions
         cleanupStream();
         cleanupComplete();
-        setIsCreatingDoc(false);
+
+        // Clear generating state
+        setGeneratingDocPaths(prev => {
+          const next = new Set(prev);
+          next.delete(filePath);
+          return next;
+        });
+        setTabs(prev => prev.map(t => t.path === filePath ? { ...t, generating: false } : t));
+
         if (data.success) {
-          // Verify the file actually got created before opening (retry to handle write flush delay)
+          // Verify the file actually got created (retry to handle write flush delay)
           for (let attempt = 0; attempt < 10; attempt++) {
             try {
               const check = await fetch(`/api/file?path=${encodeURIComponent(filePath)}`);
               const checkData = await check.json();
-              if (checkData.content !== undefined && checkData.content !== '') {
-                handleSelectFile(filePath);
-                return;
-              }
+              if (checkData.content !== undefined && checkData.content !== '') break;
             } catch { /* file not ready yet */ }
             await new Promise(r => setTimeout(r, 500));
           }
-          // File might exist but be empty — still open it so user can see something
-          handleSelectFile(filePath);
-          console.warn('New document file was empty or missing after generation — opening anyway');
+          // If the generating tab is currently active, reload it
+          const currentTabs = tabsRef.current;
+          const currentIdx = activeTabIndexRef.current;
+          if (currentTabs[currentIdx]?.path === filePath) {
+            doc.setFilePath(filePath);
+            setTimeout(() => loadDocumentRef.current(), 100);
+          }
+          // If user is on a different tab, the tab-switch auto-load handles it
         } else {
           console.error('New document creation failed:', data.error);
         }
@@ -1454,9 +1488,15 @@ export default function Home() {
         claude.model
       );
     } else {
-      setIsCreatingDoc(false);
+      // Not in Electron — clear generating state
+      setGeneratingDocPaths(prev => {
+        const next = new Set(prev);
+        next.delete(filePath);
+        return next;
+      });
+      setTabs(prev => prev.map(t => t.path === filePath ? { ...t, generating: false } : t));
     }
-  }, [handleSelectFile, claude.model]);
+  }, [claude.model, doc.setFilePath]);
 
   const handleCreateBlank = useCallback(async (filePath: string) => {
     setShowNewDocModal(false);
@@ -1811,7 +1851,18 @@ export default function Home() {
             />
           )}
           <div style={{ maxWidth: '816px', margin: '0 auto', width: '100%' }}>
-          {!doc.filePath && !doc.isRestoringPath ? (
+          {generatingDocPaths.has(tabs[activeTabIndex]?.path) ? (
+            <div
+              className="flex flex-col items-center justify-center gap-4 py-20"
+              style={{ color: 'var(--color-ink-faded)' }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" className="animate-spin">
+                <circle cx="12" cy="12" r="10" opacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" />
+              </svg>
+              <span className="text-sm">Creating document with Claude...</span>
+            </div>
+          ) : !doc.filePath && !doc.isRestoringPath ? (
             <div className="flex flex-col items-center justify-center py-20" style={{ color: 'var(--color-ink-faded)' }}>
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="1.5" style={{ marginBottom: '16px', opacity: 0.6 }}>
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -1902,17 +1953,6 @@ export default function Home() {
                 setMultiAgentSections([]);
               }}
             />
-          ) : isCreatingDoc ? (
-            <div
-              className="flex flex-col items-center justify-center gap-4 py-20"
-              style={{ color: 'var(--color-ink-faded)' }}
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" className="animate-spin">
-                <circle cx="12" cy="12" r="10" opacity="0.25" />
-                <path d="M12 2a10 10 0 0 1 10 10" />
-              </svg>
-              <span className="text-sm">Creating document with Claude...</span>
-            </div>
           ) : doc.isLoading ? (
             <div
               className="flex items-center gap-3 animate-pulse-subtle"
