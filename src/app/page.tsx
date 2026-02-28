@@ -100,6 +100,7 @@ export default function Home() {
   const [settingsGithubRemote, setSettingsGithubRemote] = useState('');
   const [settingsGoogleClientId, setSettingsGoogleClientId] = useState('');
   const [settingsGoogleClientSecret, setSettingsGoogleClientSecret] = useState('');
+  const [settingsDefaultModel, setSettingsDefaultModel] = useState<string>('sonnet');
 
   // Split pane state
   const [splitTabIndex, setSplitTabIndex] = useState<number | null>(null);
@@ -1704,6 +1705,7 @@ export default function Home() {
             setSettingsVaultRoot(settings?.vaultRoot || '');
             setSettingsGithubSync(!!settings?.githubAutoSync);
             setSettingsGithubRemote(settings?.githubRemote || '');
+            setSettingsDefaultModel(settings?.defaultModel || 'sonnet');
             const creds = await window.electronAPI?.google.loadCredentials();
             setSettingsGoogleClientId(creds?.clientId || '');
             setSettingsGoogleClientSecret(creds?.clientSecret || '');
@@ -2418,6 +2420,33 @@ export default function Home() {
             }}
           >
             <h2 style={{ margin: '0 0 16px', fontSize: '16px', fontWeight: 600, color: 'var(--color-ink)' }}>Settings</h2>
+            {/* Default Model */}
+            <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--color-ink)', marginBottom: '6px' }}>
+              Default Model
+            </label>
+            <p style={{ fontSize: '12px', color: 'var(--color-ink-faded)', margin: '0 0 8px' }}>
+              Claude model used for edits and chat. Can be overridden per session.
+            </p>
+            <select
+              value={settingsDefaultModel}
+              onChange={(e) => setSettingsDefaultModel(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                fontSize: '13px',
+                borderRadius: '6px',
+                border: '1px solid var(--color-border)',
+                background: 'var(--color-paper)',
+                color: 'var(--color-ink)',
+                outline: 'none',
+                marginBottom: '20px',
+                boxSizing: 'border-box',
+              }}
+            >
+              <option value="haiku">Haiku (fast)</option>
+              <option value="sonnet">Sonnet (balanced)</option>
+              <option value="opus">Opus (powerful)</option>
+            </select>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: 'var(--color-ink)', marginBottom: '6px' }}>
               Vault Root
             </label>
@@ -2593,6 +2622,8 @@ export default function Home() {
                       setVaultRoot(root ?? null);
                     } catch { setVaultRoot(null); }
                   }
+                  await window.electronAPI?.settings.set('defaultModel', settingsDefaultModel);
+                  claude.setModel(settingsDefaultModel as 'haiku' | 'sonnet' | 'opus');
                   await window.electronAPI?.settings.set('githubAutoSync', settingsGithubSync);
                   setGithubSyncEnabled(settingsGithubSync);
                   if (settingsGithubSync && settingsGithubRemote.trim()) {

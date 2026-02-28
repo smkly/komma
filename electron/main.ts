@@ -591,7 +591,7 @@ function registerIpcHandlers() {
       }
       currentEditDocPath = filePath;
 
-      const useModel = model || 'sonnet';
+      const useModel = model || readSettings().defaultModel || 'sonnet';
       const isFast = useModel !== 'opus';
 
       const vaultRoot = resolveVaultRoot(filePath);
@@ -820,7 +820,7 @@ function registerIpcHandlers() {
         promptParts.push(`The user has attached ${images.length} image(s). Read each image file to view them:\n${tempImagePaths.map(p => `- ${p}`).join('\n')}`);
       }
 
-      const useModel = model || 'sonnet';
+      const useModel = model || readSettings().defaultModel || 'sonnet';
       const fullPrompt = promptParts.join('\n\n---\n\n');
       accumulatedChatText = '';
       currentChat = spawnClaude(fullPrompt, {

@@ -183,6 +183,16 @@ export function useClaude({
   const isElectron = typeof window !== 'undefined' && !!window.electronAPI;
   const [model, setModel] = useState<string>('sonnet');
 
+  // Load default model from settings on mount
+  useEffect(() => {
+    if (!isElectron) return;
+    window.electronAPI?.settings.get().then((settings: Record<string, unknown> | undefined) => {
+      if (settings?.defaultModel && typeof settings.defaultModel === 'string') {
+        setModel(settings.defaultModel);
+      }
+    }).catch(() => {});
+  }, [isElectron]);
+
   const clearProposals = useCallback(() => {
     setBeforeMarkdown(null);
     setAfterMarkdown(null);
