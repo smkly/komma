@@ -118,12 +118,23 @@ async function startNextServer(port: number): Promise<void> {
     : path.join(__dirname, '..');
 
   if (app.isPackaged) {
-    // Production: use Next.js standalone server
-    // ELECTRON_RUN_AS_NODE makes the Electron binary behave as plain Node.js
+    // Production: use system node to run Next.js standalone server
+    // We can't use ELECTRON_RUN_AS_NODE because its ABI differs from both
+    // standard Node and @electron/rebuild, breaking native modules.
+    const nodePaths = [
+      '/opt/homebrew/bin/node',
+      '/usr/local/bin/node',
+      path.join(os.homedir(), '.nvm/versions/node', 'lts', 'bin/node'),
+      '/usr/bin/node',
+    ];
+    let nodeBin = 'node'; // fallback to PATH
+    for (const p of nodePaths) {
+      if (fs.existsSync(p)) { nodeBin = p; break; }
+    }
     const standaloneDir = path.join(projectRoot, '.next', 'standalone');
     const serverPath = path.join(standaloneDir, 'server.js');
-    nextServer = spawn(process.execPath, [serverPath], {
-      env: { ...process.env, PORT: String(port), NODE_ENV: 'production', ELECTRON_RUN_AS_NODE: '1' },
+    nextServer = spawn(nodeBin, [serverPath], {
+      env: { ...process.env, PORT: String(port), NODE_ENV: 'production' },
       cwd: standaloneDir,
       stdio: 'pipe',
     });
