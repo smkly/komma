@@ -1615,6 +1615,20 @@ export default function Home() {
       remarkPlugins={[remarkGfm, remarkFrontmatter]}
       rehypePlugins={[rehypeRaw]}
       components={{
+        a: ({ href, children, ...props }) => {
+          const handleClick = (e: React.MouseEvent) => {
+            e.preventDefault();
+            if (!href) return;
+            if (href.startsWith('http://') || href.startsWith('https://')) {
+              window.electronAPI?.google.openUrl(href) ?? window.open(href);
+              return;
+            }
+            const docDir = doc.filePath.substring(0, doc.filePath.lastIndexOf('/'));
+            const resolved = href.startsWith('/') ? href : `${docDir}/${href}`;
+            handleSelectFile(resolved);
+          };
+          return <a href={href} onClick={handleClick} {...props}>{children}</a>;
+        },
         img: ({ src, alt, ...props }) => {
           if (!src || typeof src !== 'string') return null;
           let resolvedSrc = src;
@@ -1628,7 +1642,7 @@ export default function Home() {
     >
       {processHighlights(processWikiLinks(doc.markdown))}
     </ReactMarkdown>
-  ), [doc.markdown, doc.filePath]);
+  ), [doc.markdown, doc.filePath, handleSelectFile]);
 
   // Highlight text in the rendered DOM for:
   // 1. Saved comments (while they exist)
