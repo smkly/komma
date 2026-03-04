@@ -165,8 +165,6 @@ export default function Home() {
     claudeOutput: string;
     streamOutput: string;
     showLastOutput: boolean;
-    comments: any[];
-    changelogs: any[];
   }>>(new Map());
   const splitMainRef = useRef<HTMLElement>(null);
   const splitArticleRef = useRef<HTMLElement>(null);
@@ -453,15 +451,21 @@ export default function Home() {
     searchMarksRef.current = [];
   }, []);
 
-  // Wrap loadDocument to also update comments, changelogs, and recent files
+  // Wrap loadDocument to also update comments, changelogs, and recent files.
+  // loadGenRef guards against stale responses from a previous doc's in-flight fetch.
+  const loadGenRef = useRef(0);
   const loadDocument = useCallback(async () => {
+    const gen = ++loadGenRef.current;
+    const targetPath = doc.filePath;
     const result = await doc.loadDocument();
+    // If another load was triggered while we were fetching, discard this stale result
+    if (gen !== loadGenRef.current) return;
     setComments(result.comments);
     changelog.setChangelogs(result.changelogs);
     // Add to recent files
     setRecentFiles(prev => {
-      const filtered = prev.filter(f => f !== doc.filePath);
-      return [doc.filePath, ...filtered].slice(0, 5);
+      const filtered = prev.filter(f => f !== targetPath);
+      return [targetPath, ...filtered].slice(0, 5);
     });
   }, [doc.loadDocument, doc.filePath, setComments, changelog.setChangelogs]);
 
@@ -541,16 +545,15 @@ export default function Home() {
           chat.restoreState(cached.chatActiveSessionId, cached.chatMessages, cached.chatSessions);
           chatDraftRef.current = cached.chatDraft;
           claude.restoreState(cached.beforeMarkdown, cached.afterMarkdown, cached.claudeOutput, cached.streamOutput, cached.showLastOutput ?? false, cached.diffChunks);
-          setComments(cached.comments);
-          changelog.setChangelogs(cached.changelogs);
         } else {
           // No cached state — clear diff/proposal state so old doc's review view doesn't persist
           claude.restoreState(null, null, '', '', false);
         }
       }
+      // Track which path this load completed for
+      prevFilePathRef.current = doc.filePath;
     }
     prevLoadingRef.current = doc.isLoading;
-    prevFilePathRef.current = doc.filePath;
   }, [doc.isLoading, doc.filePath]);
 
   // Resolve vault root when file path changes — settings-configured root takes priority
@@ -659,12 +662,10 @@ export default function Home() {
   }, [activeTabIndex, tabs, doc.filePath, doc.setFilePath]);
 
   // Tab handlers
-  const handleSelectTab = useCallback((index: number) => {
-    // Save current scroll position
+  const saveCurrentDocState = useCallback(() => {
     if (mainRef.current && tabs[activeTabIndex]) {
       scrollPositionMap.current.set(tabs[activeTabIndex].path, mainRef.current.scrollTop);
     }
-    // Save current document state to cache
     if (tabs[activeTabIndex]) {
       perDocCacheRef.current.set(tabs[activeTabIndex].path, {
         chatActiveSessionId: chat.activeSessionId,
@@ -677,15 +678,19 @@ export default function Home() {
         claudeOutput: claude.claudeOutput,
         streamOutput: claude.streamOutput,
         showLastOutput: claude.showLastOutput,
-        comments: comments,
-        changelogs: changelog.changelogs,
       });
     }
+  }, [tabs, activeTabIndex, chat.activeSessionId, chat.messages, chat.sessions, claude.beforeMarkdown, claude.afterMarkdown, claude.diffChunks, claude.claudeOutput, claude.streamOutput, claude.showLastOutput]);
+
+  const handleSelectTab = useCallback((index: number) => {
+    saveCurrentDocState();
     setActiveTabIndex(index);
-  }, [tabs, activeTabIndex, chat.activeSessionId, chat.messages, chat.sessions, claude.beforeMarkdown, claude.afterMarkdown, claude.diffChunks, claude.claudeOutput, claude.streamOutput, claude.showLastOutput, comments, changelog.changelogs]);
+  }, [saveCurrentDocState]);
 
   const handleCloseTab = useCallback((index: number) => {
     if (tabs.length <= 1) return;
+    // Save state for the closing tab so it can be restored if reopened
+    saveCurrentDocState();
     // If closing the tab that's in the split pane, close the split
     if (splitTabIndex === index) {
       setSplitTabIndex(null);
@@ -700,7 +705,7 @@ export default function Home() {
     } else if (index < activeTabIndex) {
       setActiveTabIndex(activeTabIndex - 1);
     }
-  }, [tabs, activeTabIndex, splitTabIndex]);
+  }, [tabs, activeTabIndex, splitTabIndex, saveCurrentDocState]);
 
   const cancelComment = useCallback(() => {
     setShowCommentInput(false);
@@ -1353,6 +1358,7 @@ export default function Home() {
 
   const handleSelectFile = useCallback((path: string) => {
     setShowFileBrowser(false);
+    saveCurrentDocState();
     const existingIdx = tabs.findIndex(t => t.path === path);
     if (existingIdx >= 0) {
       setActiveTabIndex(existingIdx);
@@ -1362,7 +1368,7 @@ export default function Home() {
       setTabs(prev => [...prev, newTab]);
       setActiveTabIndex(newIndex);
     }
-  }, [tabs]);
+  }, [tabs, saveCurrentDocState]);
 
   const handleSelectFileRef = useRef(handleSelectFile);
   useEffect(() => { handleSelectFileRef.current = handleSelectFile; }, [handleSelectFile]);

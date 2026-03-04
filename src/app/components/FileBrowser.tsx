@@ -126,11 +126,11 @@ export default function FileBrowser({
     return browserFiles.filter(f => f.name.toLowerCase().includes(lower));
   }, [browserFiles, filter, searchResults, searchRoot]);
 
-  // Load the directory when the modal opens
+  // Load the directory when the modal opens — navigate to current file's location
   useEffect(() => {
     if (show) {
       const fileDir = filePath ? filePath.substring(0, filePath.lastIndexOf('/')) : '';
-      const dir = vaultRoot || fileDir || '';
+      const dir = fileDir || vaultRoot || '';
       loadBrowserDirectory(dir);
       setFilter('');
       setSelectedIndex(0);
@@ -138,6 +138,15 @@ export default function FileBrowser({
       setTimeout(() => searchInputRef.current?.focus(), 50);
     }
   }, [show, filePath, vaultRoot, loadBrowserDirectory]);
+
+  // Pre-select the current file when the file list loads
+  useEffect(() => {
+    if (show && filePath && browserFiles.length > 0) {
+      const fileName = filePath.split('/').pop() || '';
+      const idx = browserFiles.findIndex(f => f.name === fileName);
+      if (idx >= 0) setSelectedIndex(idx);
+    }
+  }, [show, filePath, browserFiles]);
 
   // Reset selected index when filter changes
   useEffect(() => {

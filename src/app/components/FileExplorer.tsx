@@ -46,6 +46,36 @@ export default function FileExplorer({ show, currentDir, currentFile, onSelectFi
     }
   }, [currentDir]);
 
+  // Auto-expand directories leading to the current file
+  useEffect(() => {
+    if (!currentDir || !currentFile || !currentFile.startsWith(currentDir + '/')) return;
+    const relative = currentFile.slice(currentDir.length + 1);
+    const parts = relative.split('/');
+    if (parts.length <= 1) return; // file is in root dir, no folders to expand
+
+    // Build list of ancestor directories to expand
+    const dirsToExpand: string[] = [];
+    let path = currentDir;
+    for (let i = 0; i < parts.length - 1; i++) {
+      path += '/' + parts[i];
+      dirsToExpand.push(path);
+    }
+
+    // Expand and fetch each ancestor sequentially
+    (async () => {
+      for (const dir of dirsToExpand) {
+        setExpanded(prev => ({ ...prev, [dir]: true }));
+        if (!contents[dir]) {
+          try {
+            const res = await fetch(`/api/files?path=${encodeURIComponent(dir)}`);
+            const data = await res.json();
+            setContents(prev => ({ ...prev, [dir]: data.files }));
+          } catch { /* ignore */ }
+        }
+      }
+    })();
+  }, [currentDir, currentFile]);
+
   // Close context menu on click outside
   useEffect(() => {
     if (!contextMenu) return;
@@ -159,7 +189,7 @@ export default function FileExplorer({ show, currentDir, currentFile, onSelectFi
       </div>
 
       {/* Tree */}
-      <div style={{ overflowY: 'auto', flex: 1, padding: '4px 0' }}>
+      <div id="file-explorer-tree" style={{ overflowY: 'auto', flex: 1, padding: '4px 0' }}>
         {contents[currentDir]?.map(file => (
           <FileTreeItem
             key={file.path}
@@ -441,8 +471,10 @@ function FileTreeItem({
     <div
       onClick={isMarkdown && !isRenaming ? () => onSelectFile(file.path) : undefined}
       onContextMenu={(e) => onContextMenu(e, file)}
+      data-active={isActive || undefined}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      ref={el => { if (isActive && el) setTimeout(() => el.scrollIntoView({ block: 'nearest' }), 100); }}
       style={{
         display: 'flex',
         alignItems: 'center',

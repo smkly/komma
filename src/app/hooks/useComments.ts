@@ -42,7 +42,7 @@ export function useComments(filePath: string) {
   const removeComment = async (id: number) => {
     try {
       await fetch(`/api/comments?id=${id}`, { method: 'DELETE' });
-      setComments(comments.filter(c => c.id !== id));
+      setComments(prev => prev.filter(c => c.id !== id));
     } catch (error) {
       console.error('Failed to delete comment:', error);
     }

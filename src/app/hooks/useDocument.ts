@@ -17,6 +17,7 @@ export function useDocument() {
   const [isRestoringPath, setIsRestoringPath] = useState(true);
   const [frontmatter, setFrontmatter] = useState<ParsedFrontmatter | null>(null);
   const rawFrontmatterRef = useRef<string | null>(null);
+  const prevLoadedPathRef = useRef<string>('');
 
   // Track whether an external open (IPC) changed the path before restore finished
   const externalOpenRef = useRef(false);
@@ -119,7 +120,11 @@ export function useDocument() {
       return { comments: [], changelogs: [] };
     }
     setIsLoading(true);
-    setMarkdown('');
+    // Only clear markdown when switching to a different doc to avoid flash;
+    // reloading the same doc (e.g. after save) keeps existing content visible
+    if (filePath !== prevLoadedPathRef.current) {
+      setMarkdown('');
+    }
     let loadedComments: Comment[] = [];
     let loadedChangelogs: ChangelogEntry[] = [];
     const fetchWithRetry = async (url: string, retries = 5): Promise<Response> => {
@@ -172,6 +177,7 @@ export function useDocument() {
     } catch (error) {
       console.error('Failed to load document:', error);
     }
+    prevLoadedPathRef.current = filePath;
     setIsLoading(false);
     return { comments: loadedComments, changelogs: loadedChangelogs };
   }, [filePath, isHtml]);
