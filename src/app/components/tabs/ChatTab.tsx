@@ -240,24 +240,147 @@ export default function ChatTab({
         </div>
       )}
 
-      {/* Messages area */}
-      <div
-        className={`overflow-y-auto mb-3 flex-1 ${messages.length === 0 && !isStreaming ? 'flex items-center justify-center' : 'space-y-3'}`}
-        style={{ minHeight: 0 }}
-      >
-        {messages.length === 0 && !isStreaming ? (
+      {messages.length === 0 && !isStreaming ? (
+        /* Empty state: center the input like a text message composer */
+        <div className="flex-1 flex flex-col items-center justify-center px-2">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mb-3 opacity-30" style={{ color: 'var(--color-ink-faded)' }}>
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          <p className="text-xs mb-1" style={{ color: 'var(--color-ink-faded)' }}>Ask about this document</p>
+          <p className="text-[11px] mb-4 opacity-60" style={{ color: 'var(--color-ink-faded)' }}>Type @ to reference other docs</p>
+
+          {/* Context selection indicator */}
+          {selectedText && (
+            <div className="mb-2 w-full">
+              <label
+                className="flex items-center gap-2 text-xs cursor-pointer rounded-lg px-2 py-1.5 transition-colors"
+                style={{
+                  background: includeContext ? 'var(--color-accent-light)' : 'var(--color-paper-dark)',
+                  color: includeContext ? 'var(--color-accent)' : 'var(--color-ink-faded)',
+                  border: `1px solid ${includeContext ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={includeContext}
+                  onChange={(e) => setIncludeContext(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="truncate">
+                  Include: &ldquo;{selectedText.substring(0, 40)}{selectedText.length > 40 ? '...' : ''}&rdquo;
+                </span>
+              </label>
+            </div>
+          )}
+
+          {/* Image previews */}
+          {attachedImages.length > 0 && (
+            <div className="flex gap-2 mb-2 flex-wrap">
+              {attachedImages.map((img, i) => (
+                <div
+                  key={i}
+                  className="relative rounded-lg overflow-hidden"
+                  style={{ border: '1px solid var(--color-border)', width: 60, height: 60 }}
+                >
+                  <img src={img.preview} alt={img.name} className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
+                    className="absolute top-0 right-0 p-0.5 rounded-bl-md"
+                    style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: '10px', lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Centered input */}
           <div
-            className="text-sm text-center"
-            style={{ color: 'var(--color-ink-faded)' }}
+            data-chat-dropzone
+            className="w-full relative flex items-end gap-2 p-2 rounded-xl"
+            style={{
+              background: 'var(--color-surface)',
+              border: isDragOver ? '2px dashed var(--color-accent)' : '1px solid var(--color-border)',
+              transition: 'border 0.15s',
+            }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); }}
+            onDrop={(e) => {
+              e.preventDefault(); e.stopPropagation(); setIsDragOver(false);
+              if (e.dataTransfer.files.length > 0) addImageFiles(e.dataTransfer.files);
+            }}
           >
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto mb-2 opacity-40">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-            <p className="text-xs">Ask about this document</p>
-            <p className="text-[11px] mt-0.5 opacity-60">Type @ to reference other docs</p>
+            <textarea
+              ref={inputRef}
+              value={inputValue}
+              onChange={(e) => handleInputChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onPaste={(e) => {
+                const items = e.clipboardData?.items;
+                if (!items) return;
+                const imageItems = Array.from(items).filter(item => item.type.startsWith('image/'));
+                if (imageItems.length > 0) {
+                  e.preventDefault();
+                  const files = imageItems.map(item => item.getAsFile()).filter(Boolean) as File[];
+                  addImageFiles(files);
+                }
+              }}
+              placeholder={isDragOver ? 'Drop image here...' : 'Ask about this document...'}
+              rows={1}
+              className="flex-1 resize-none text-sm outline-none"
+              style={{ color: 'var(--color-ink)', lineHeight: 1.5, maxHeight: '120px', background: 'transparent' }}
+            />
+            <div className="flex flex-col items-center gap-1 flex-shrink-0">
+              <button
+                onClick={handleSend}
+                disabled={!inputValue.trim()}
+                aria-label="Send message"
+                className="p-1.5 rounded-lg transition-all"
+                style={{
+                  background: inputValue.trim() ? 'var(--color-accent)' : 'var(--color-border)',
+                  color: inputValue.trim() ? 'var(--color-vim-insert-fg)' : 'var(--color-ink-faded)',
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+              </button>
+              <div className="relative">
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="appearance-none text-[10px] font-medium pl-1 pr-3 py-0 rounded cursor-pointer outline-none"
+                  style={{ background: 'transparent', color: 'var(--color-ink-faded)', border: 'none' }}
+                >
+                  <option value="haiku">Haiku</option>
+                  <option value="sonnet">Sonnet</option>
+                  <option value="opus">Opus</option>
+                </select>
+                <svg
+                  width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: 'var(--color-ink-faded)' }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </div>
+            </div>
+            <MentionDropdown
+              show={mentions.showMentions}
+              items={mentions.mentionItems}
+              selectedIndex={mentions.mentionIndex}
+              onSelect={insertMentionIntoInput}
+              onHover={mentions.setMentionIndex}
+              position="above"
+            />
           </div>
-        ) : (
-          <>
+        </div>
+      ) : (
+        /* Active chat: messages + input flow together, scroll as a unit */
+        <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+          <div className="space-y-3 mb-3">
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -276,7 +399,6 @@ export default function ChatTab({
                     borderBottomLeftRadius: '4px',
                   }}
                 >
-                  {/* Context selection badge */}
                   {msg.context_selection && (
                     <div
                       className="text-xs mb-1.5 px-2 py-1 rounded"
@@ -292,13 +414,7 @@ export default function ChatTab({
                   {msg.images && msg.images.length > 0 && (
                     <div className="flex gap-1.5 mb-1.5 flex-wrap">
                       {msg.images.map((src, i) => (
-                        <img
-                          key={i}
-                          src={src}
-                          alt="attached"
-                          className="rounded-md"
-                          style={{ maxWidth: 120, maxHeight: 80, objectFit: 'cover' }}
-                        />
+                        <img key={i} src={src} alt="attached" className="rounded-md" style={{ maxWidth: 120, maxHeight: 80, objectFit: 'cover' }} />
                       ))}
                     </div>
                   )}
@@ -309,7 +425,6 @@ export default function ChatTab({
               </div>
             ))}
 
-            {/* Streaming indicator */}
             {isStreaming && (
               <div className="flex justify-start">
                 <div
@@ -321,225 +436,168 @@ export default function ChatTab({
                   }}
                 >
                   <div className="flex items-center gap-1.5" style={{ color: 'var(--color-ink-faded)' }}>
-                    <span
-                      className="w-1.5 h-1.5 rounded-full animate-pulse"
-                      style={{ background: 'var(--color-accent)', animationDelay: '0ms' }}
-                    />
-                    <span
-                      className="w-1.5 h-1.5 rounded-full animate-pulse"
-                      style={{ background: 'var(--color-accent)', animationDelay: '150ms' }}
-                    />
-                    <span
-                      className="w-1.5 h-1.5 rounded-full animate-pulse"
-                      style={{ background: 'var(--color-accent)', animationDelay: '300ms' }}
-                    />
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--color-accent)', animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--color-accent)', animationDelay: '150ms' }} />
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--color-accent)', animationDelay: '300ms' }} />
                     <span className="ml-1 text-xs">Thinking...</span>
                   </div>
                 </div>
               </div>
             )}
-          </>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Stream output (collapsible) */}
-      {isStreaming && streamOutput && (
-        <div className="mb-3 flex-shrink-0">
-          <div
-            className="text-xs font-medium uppercase tracking-wide mb-1 flex items-center gap-2"
-            style={{ color: 'var(--color-ink-faded)' }}
-          >
-            <span
-              className="w-2 h-2 rounded-full animate-pulse"
-              style={{ background: 'var(--color-success)' }}
-            />
-            Live Output
+            <div ref={messagesEndRef} />
           </div>
-          <div
-            ref={streamRef}
-            className="rounded-lg p-2 font-mono text-xs overflow-y-auto"
-            style={{
-              background: 'var(--color-paper-dark)',
-              color: 'var(--color-ink)',
-              maxHeight: '150px',
-              lineHeight: 1.4,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}
-          >
-            {streamOutput}
-          </div>
-        </div>
-      )}
 
-      {/* Context selection indicator */}
-      {selectedText && (
-        <div className="mb-2 flex-shrink-0">
-          <label
-            className="flex items-center gap-2 text-xs cursor-pointer rounded-lg px-2 py-1.5 transition-colors"
-            style={{
-              background: includeContext ? 'var(--color-accent-light)' : 'var(--color-paper-dark)',
-              color: includeContext ? 'var(--color-accent)' : 'var(--color-ink-faded)',
-              border: `1px solid ${includeContext ? 'var(--color-accent)' : 'var(--color-border)'}`,
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={includeContext}
-              onChange={(e) => setIncludeContext(e.target.checked)}
-              className="rounded"
-            />
-            <span className="truncate">
-              Include: &ldquo;{selectedText.substring(0, 40)}{selectedText.length > 40 ? '...' : ''}&rdquo;
-            </span>
-          </label>
-        </div>
-      )}
-
-      {/* Image previews */}
-      {attachedImages.length > 0 && (
-        <div className="flex gap-2 mb-2 flex-shrink-0 flex-wrap">
-          {attachedImages.map((img, i) => (
-            <div
-              key={i}
-              className="relative rounded-lg overflow-hidden"
-              style={{ border: '1px solid var(--color-border)', width: 60, height: 60 }}
-            >
-              <img src={img.preview} alt={img.name} className="w-full h-full object-cover" />
-              <button
-                onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
-                className="absolute top-0 right-0 p-0.5 rounded-bl-md"
-                style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: '10px', lineHeight: 1 }}
+          {/* Stream output */}
+          {isStreaming && streamOutput && (
+            <div className="mb-3 flex-shrink-0">
+              <div className="text-xs font-medium uppercase tracking-wide mb-1 flex items-center gap-2" style={{ color: 'var(--color-ink-faded)' }}>
+                <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--color-success)' }} />
+                Live Output
+              </div>
+              <div
+                ref={streamRef}
+                className="rounded-lg p-2 font-mono text-xs overflow-y-auto"
+                style={{ background: 'var(--color-paper-dark)', color: 'var(--color-ink)', maxHeight: '150px', lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
               >
-                ×
-              </button>
+                {streamOutput}
+              </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Input area */}
-      <div
-        data-chat-dropzone
-        className="flex-shrink-0 relative flex items-end gap-2 p-2 rounded-xl"
-        style={{
-          background: 'var(--color-surface)',
-          border: isDragOver ? '2px dashed var(--color-accent)' : '1px solid var(--color-border)',
-          transition: 'border 0.15s',
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragOver(true);
-        }}
-        onDragLeave={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragOver(false);
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragOver(false);
-          if (e.dataTransfer.files.length > 0) {
-            addImageFiles(e.dataTransfer.files);
-          }
-        }}
-      >
-        <textarea
-          ref={inputRef}
-          value={inputValue}
-          onChange={(e) => handleInputChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onPaste={(e) => {
-            const items = e.clipboardData?.items;
-            if (!items) return;
-            const imageItems = Array.from(items).filter(item => item.type.startsWith('image/'));
-            if (imageItems.length > 0) {
-              e.preventDefault();
-              const files = imageItems.map(item => item.getAsFile()).filter(Boolean) as File[];
-              addImageFiles(files);
-            }
-          }}
-          placeholder={isDragOver ? 'Drop image here...' : 'Ask about this document... (type @ for refs)'}
-          disabled={isStreaming}
-          rows={1}
-          className="flex-1 resize-none text-sm outline-none"
-          style={{
-            color: 'var(--color-ink)',
-            lineHeight: 1.5,
-            maxHeight: '120px',
-            background: 'transparent',
-          }}
-        />
-        <div className="flex flex-col items-center gap-1 flex-shrink-0">
-          {isStreaming ? (
-            <button
-              onClick={onCancelChat}
-              aria-label="Stop generation"
-              className="p-1.5 rounded-lg transition-all"
-              style={{
-                background: 'var(--color-danger)',
-                color: '#fff',
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="1" />
-              </svg>
-            </button>
-          ) : (
-            <button
-              onClick={handleSend}
-              disabled={!inputValue.trim() || isStreaming}
-              aria-label="Send message"
-              className="p-1.5 rounded-lg transition-all"
-              style={{
-                background: inputValue.trim() && !isStreaming ? 'var(--color-accent)' : 'var(--color-border)',
-                color: inputValue.trim() && !isStreaming ? 'var(--color-vim-insert-fg)' : 'var(--color-ink-faded)',
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
-            </button>
           )}
-          <div className="relative">
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="appearance-none text-[10px] font-medium pl-1 pr-3 py-0 rounded cursor-pointer outline-none"
-              style={{
-                background: 'transparent',
-                color: 'var(--color-ink-faded)',
-                border: 'none',
+
+          {/* Context selection indicator */}
+          {selectedText && (
+            <div className="mb-2 flex-shrink-0">
+              <label
+                className="flex items-center gap-2 text-xs cursor-pointer rounded-lg px-2 py-1.5 transition-colors"
+                style={{
+                  background: includeContext ? 'var(--color-accent-light)' : 'var(--color-paper-dark)',
+                  color: includeContext ? 'var(--color-accent)' : 'var(--color-ink-faded)',
+                  border: `1px solid ${includeContext ? 'var(--color-accent)' : 'var(--color-border)'}`,
+                }}
+              >
+                <input type="checkbox" checked={includeContext} onChange={(e) => setIncludeContext(e.target.checked)} className="rounded" />
+                <span className="truncate">
+                  Include: &ldquo;{selectedText.substring(0, 40)}{selectedText.length > 40 ? '...' : ''}&rdquo;
+                </span>
+              </label>
+            </div>
+          )}
+
+          {/* Image previews */}
+          {attachedImages.length > 0 && (
+            <div className="flex gap-2 mb-2 flex-shrink-0 flex-wrap">
+              {attachedImages.map((img, i) => (
+                <div key={i} className="relative rounded-lg overflow-hidden" style={{ border: '1px solid var(--color-border)', width: 60, height: 60 }}>
+                  <img src={img.preview} alt={img.name} className="w-full h-full object-cover" />
+                  <button
+                    onClick={() => setAttachedImages(prev => prev.filter((_, j) => j !== i))}
+                    className="absolute top-0 right-0 p-0.5 rounded-bl-md"
+                    style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', fontSize: '10px', lineHeight: 1 }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Input area */}
+          <div
+            data-chat-dropzone
+            className="flex-shrink-0 relative flex items-end gap-2 p-2 rounded-xl"
+            style={{
+              background: 'var(--color-surface)',
+              border: isDragOver ? '2px dashed var(--color-accent)' : '1px solid var(--color-border)',
+              transition: 'border 0.15s',
+            }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); }}
+            onDrop={(e) => {
+              e.preventDefault(); e.stopPropagation(); setIsDragOver(false);
+              if (e.dataTransfer.files.length > 0) addImageFiles(e.dataTransfer.files);
+            }}
+          >
+            <textarea
+              ref={inputRef}
+              value={inputValue}
+              onChange={(e) => handleInputChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onPaste={(e) => {
+                const items = e.clipboardData?.items;
+                if (!items) return;
+                const imageItems = Array.from(items).filter(item => item.type.startsWith('image/'));
+                if (imageItems.length > 0) {
+                  e.preventDefault();
+                  const files = imageItems.map(item => item.getAsFile()).filter(Boolean) as File[];
+                  addImageFiles(files);
+                }
               }}
-            >
-              <option value="haiku">Haiku</option>
-              <option value="sonnet">Sonnet</option>
-              <option value="opus">Opus</option>
-            </select>
-            <svg
-              width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none"
-              style={{ color: 'var(--color-ink-faded)' }}
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+              placeholder={isDragOver ? 'Drop image here...' : 'Ask about this document... (type @ for refs)'}
+              disabled={isStreaming}
+              rows={1}
+              className="flex-1 resize-none text-sm outline-none"
+              style={{ color: 'var(--color-ink)', lineHeight: 1.5, maxHeight: '120px', background: 'transparent' }}
+            />
+            <div className="flex flex-col items-center gap-1 flex-shrink-0">
+              {isStreaming ? (
+                <button
+                  onClick={onCancelChat}
+                  aria-label="Stop generation"
+                  className="p-1.5 rounded-lg transition-all"
+                  style={{ background: 'var(--color-danger)', color: '#fff' }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12" rx="1" />
+                  </svg>
+                </button>
+              ) : (
+                <button
+                  onClick={handleSend}
+                  disabled={!inputValue.trim() || isStreaming}
+                  aria-label="Send message"
+                  className="p-1.5 rounded-lg transition-all"
+                  style={{
+                    background: inputValue.trim() && !isStreaming ? 'var(--color-accent)' : 'var(--color-border)',
+                    color: inputValue.trim() && !isStreaming ? 'var(--color-vim-insert-fg)' : 'var(--color-ink-faded)',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                  </svg>
+                </button>
+              )}
+              <div className="relative">
+                <select
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  className="appearance-none text-[10px] font-medium pl-1 pr-3 py-0 rounded cursor-pointer outline-none"
+                  style={{ background: 'transparent', color: 'var(--color-ink-faded)', border: 'none' }}
+                >
+                  <option value="haiku">Haiku</option>
+                  <option value="sonnet">Sonnet</option>
+                  <option value="opus">Opus</option>
+                </select>
+                <svg
+                  width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                  className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none"
+                  style={{ color: 'var(--color-ink-faded)' }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </div>
+            </div>
+            <MentionDropdown
+              show={mentions.showMentions}
+              items={mentions.mentionItems}
+              selectedIndex={mentions.mentionIndex}
+              onSelect={insertMentionIntoInput}
+              onHover={mentions.setMentionIndex}
+              position="above"
+            />
           </div>
         </div>
-
-        {/* Mention Autocomplete Dropdown */}
-        <MentionDropdown
-          show={mentions.showMentions}
-          items={mentions.mentionItems}
-          selectedIndex={mentions.mentionIndex}
-          onSelect={insertMentionIntoInput}
-          onHover={mentions.setMentionIndex}
-          position="above"
-        />
-      </div>
+      )}
     </div>
   );
 }

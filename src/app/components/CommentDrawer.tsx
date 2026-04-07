@@ -147,10 +147,10 @@ export default function CommentDrawer({
           </button>
         </div>
 
-        {/* Content - flexbox for proper distribution */}
-        <div className="flex-1 flex flex-col p-4 gap-4 overflow-hidden">
+        {/* Content */}
+        <div className="p-4 space-y-4 overflow-y-auto">
           {/* Selected Text - compact */}
-          <div className="flex-shrink-0">
+          <div>
             <div className="flex items-center justify-between mb-2">
               <span
                 className="text-xs font-medium uppercase tracking-wide"
@@ -179,62 +179,51 @@ export default function CommentDrawer({
             </div>
           </div>
 
-          {/* Comment Input - takes remaining space */}
-          <div className="flex-1 flex flex-col min-h-0 relative">
+          {/* Comment Input - auto-sized */}
+          <div className="relative">
             <span
-              className="text-xs font-medium uppercase tracking-wide mb-2"
+              className="text-xs font-medium uppercase tracking-wide mb-2 block"
               style={{ color: 'var(--color-ink-faded)' }}
             >
               Instruction for Claude
             </span>
-            <div className="flex-1 relative min-h-0">
-              <textarea
-                ref={textareaRef}
-                autoFocus
-                value={localComment}
-                onChange={handleChange}
-                placeholder="What should Claude do with this text?
+            <textarea
+              ref={textareaRef}
+              autoFocus
+              value={localComment}
+              onChange={handleChange}
+              placeholder={"What should Claude do with this text?\n\nExamples: Make more concise, add a date reference, rephrase for clarity, fix formatting\n\nType @ to reference docs or MCP tools"}
+              className="w-full p-3 text-sm rounded-lg transition-all resize-none focus:outline-none"
+              rows={4}
+              style={{
+                border: '2px solid var(--color-border)',
+                fontFamily: 'var(--font-sans)',
+                color: 'var(--color-ink)',
+                lineHeight: 1.6,
+                background: 'var(--color-surface)'
+              }}
+              onKeyDown={handleKeyDown}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-accent)';
+                e.currentTarget.style.boxShadow = '0 0 0 3px var(--color-accent-light)';
+              }}
+              onBlur={(e) => {
+                const related = e.relatedTarget as HTMLElement;
+                if (related?.closest('[data-mention-dropdown]')) return;
+                e.currentTarget.style.borderColor = 'var(--color-border)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+            />
 
-Examples:
-• Make this more concise
-• Add a date reference
-• Rephrase for clarity
-• Fix formatting
-
-Type @ to reference docs or MCP tools"
-                className="w-full h-full p-3 text-sm rounded-lg transition-all resize-none focus:outline-none"
-                style={{
-                  border: '2px solid var(--color-border)',
-                  fontFamily: 'var(--font-sans)',
-                  color: 'var(--color-ink)',
-                  lineHeight: 1.6,
-                  minHeight: '120px',
-                  background: 'var(--color-surface)'
-                }}
-                onKeyDown={handleKeyDown}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--color-accent)';
-                  e.currentTarget.style.boxShadow = '0 0 0 3px var(--color-accent-light)';
-                }}
-                onBlur={(e) => {
-                  // Don't close mentions on blur if clicking dropdown
-                  const related = e.relatedTarget as HTMLElement;
-                  if (related?.closest('[data-mention-dropdown]')) return;
-                  e.currentTarget.style.borderColor = 'var(--color-border)';
-                  e.currentTarget.style.boxShadow = 'none';
-                }}
-              />
-
-              {/* Mention Autocomplete Dropdown */}
-              <MentionDropdown
-                show={mentions.showMentions}
-                items={mentions.mentionItems}
-                selectedIndex={mentions.mentionIndex}
-                onSelect={insertMentionIntoTextarea}
-                onHover={mentions.setMentionIndex}
-                position="above"
-              />
-            </div>
+            {/* Mention Autocomplete Dropdown */}
+            <MentionDropdown
+              show={mentions.showMentions}
+              items={mentions.mentionItems}
+              selectedIndex={mentions.mentionIndex}
+              onSelect={insertMentionIntoTextarea}
+              onHover={mentions.setMentionIndex}
+              position="above"
+            />
           </div>
         </div>
 
