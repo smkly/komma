@@ -12,3 +12,10 @@ mac:
   target:
     - dmg
     - zip
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSBluetoothAlwaysUsageDescription: ""
+    NSBluetoothPeripheralUsageDescription: ""
+    NSCameraUsageDescription: ""
+    NSMicrophoneUsageDescription: ""

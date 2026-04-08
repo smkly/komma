@@ -8,6 +8,7 @@ interface SpawnClaudeOpts {
   maxTurns?: number;
   model?: string;
   mcpConfig?: string;
+  cwd?: string;
 }
 
 export interface ClaudeProcess {
@@ -85,6 +86,7 @@ export function spawnClaude(
   let proc: ChildProcess | null = spawn(claudePath, args, {
     stdio: ['ignore', 'pipe', 'pipe'],
     env,
+    ...(opts?.cwd ? { cwd: opts.cwd } : {}),
   });
 
   proc.stdout?.on('data', (chunk: Buffer) => {

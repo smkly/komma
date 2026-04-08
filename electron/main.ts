@@ -989,6 +989,7 @@ function registerIpcHandlers() {
           allowedTools: ['Read', 'Edit', 'Write'],
           maxTurns: isFast ? 5 : 10,
           model: useModel,
+          cwd: vaultRoot || path.dirname(filePath),
         }),
         accumulatedText: '',
         proposalPath,
@@ -1173,6 +1174,7 @@ function registerIpcHandlers() {
         allowedTools: ['Read', 'Edit', 'Write'],
         maxTurns: useModel === 'opus' ? 15 : 10,
         model: useModel,
+        cwd: vaultRoot || path.dirname(docPath),
       });
 
       currentChat.onData((text) => {
@@ -1497,10 +1499,12 @@ function registerIpcHandlers() {
             const sectionPrompt = `You are writing one section of a larger document. Here is the full outline:\n\n${outline}\n\n---\n\nWrite ONLY the following section: "${section.title}"\n\n${section.prompt}\n\nWrite well-structured markdown content for this section only. Do not include a title heading — it will be added automatically.`;
 
             let sectionOutput = '';
+            const vaultRoot = resolveVaultRoot(filePath);
             const proc = spawnClaude(sectionPrompt, {
               allowedTools: ['Read', 'Edit', 'Write'],
               model: useModel,
               maxTurns: 3,
+              cwd: vaultRoot || path.dirname(filePath),
             });
             activeProcesses.push(proc);
 
