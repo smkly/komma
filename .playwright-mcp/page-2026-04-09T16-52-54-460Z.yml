@@ -1,0 +1,86 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img "komma" [ref=e6]
+          - generic [ref=e7]:
+            - button "New document (⌘N)" [ref=e8] [cursor=pointer]:
+              - img [ref=e9]
+            - button "Browse files (⌘P)" [ref=e10] [cursor=pointer]:
+              - img [ref=e11]
+        - generic [ref=e13]:
+          - button "Switch to dark mode" [ref=e14] [cursor=pointer]:
+            - img [ref=e15]
+          - button "Settings" [ref=e17] [cursor=pointer]:
+            - img [ref=e18]
+          - button "Share" [ref=e21] [cursor=pointer]:
+            - img [ref=e22]
+            - text: Share
+          - button "Reload" [ref=e25] [cursor=pointer]:
+            - img [ref=e26]
+            - text: Reload
+          - button "Edit" [ref=e29] [cursor=pointer]:
+            - img [ref=e30]
+            - text: Edit
+    - generic [ref=e33]:
+      - button "Welcome ×" [ref=e258]:
+        - generic [ref=e36]: Welcome
+        - generic [ref=e260]: ×
+      - button "readme.md ×" [ref=e261]:
+        - generic [ref=e263]: readme.md
+        - generic [ref=e265]: ×
+      - button "Split editor (⌘\\)" [ref=e266]:
+        - img [ref=e267]
+    - generic [ref=e37]:
+      - main [ref=e38]:
+        - article [ref=e270]:
+          - heading "Test README" [level=1] [ref=e271]
+          - paragraph [ref=e272]:
+            - text: See
+            - link "notes" [ref=e273] [cursor=pointer]:
+              - /url: "#"
+            - text: for details.
+          - paragraph [ref=e274]:
+            - text: Also check
+            - link "docs/guide" [ref=e275] [cursor=pointer]:
+              - /url: "#"
+            - text: .
+      - complementary [ref=e71]:
+        - generic [ref=e73]:
+          - button "Contents" [ref=e74]:
+            - img [ref=e76]
+          - button "Edits" [ref=e77]:
+            - img [ref=e80]
+          - button "Chat" [ref=e83]:
+            - img [ref=e85]
+          - button "History" [ref=e87]:
+            - img [ref=e89]
+        - generic [ref=e93]:
+          - generic [ref=e94]:
+            - button "Add Comment to Selection" [ref=e95]:
+              - img [ref=e96]
+              - text: Add Comment to Selection
+            - generic [ref=e98]:
+              - img [ref=e99]
+              - generic [ref=e102]:
+                - combobox [ref=e103] [cursor=pointer]:
+                  - option "Haiku"
+                  - option "Sonnet" [selected]
+                  - option "Opus"
+                - img
+          - button "View Last Output" [ref=e104]:
+            - img [ref=e105]
+            - text: View Last Output
+          - paragraph [ref=e108]: Select text and add comments, then send to Claude
+    - generic [ref=e109]:
+      - generic [ref=e110]:
+        - generic [ref=e111]: NORMAL
+        - generic [ref=e112]: Enter edit j/k move w/b word 0/$ ends gg/G jump / search
+      - generic [ref=e113]:
+        - generic [ref=e114]: Ln 1:1
+        - generic [ref=e276]: readme.md
+        - generic [ref=e115] [cursor=pointer]: VIM
+  - button "Open Next.js Dev Tools" [ref=e121] [cursor=pointer]:
+    - img [ref=e122]
+  - alert [ref=e125]

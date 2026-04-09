@@ -1,0 +1,10 @@
+# This file is used internally by FFMPEG.
+file 'file:/Users/smick/Developer/komma/site/video/media/videos/script/480p15/partial_movie_files/Scene6_Closing/1342033902_3872978854_223132457.mp4'
+file 'file:/Users/smick/Developer/komma/site/video/media/videos/script/480p15/partial_movie_files/Scene6_Closing/1793889311_4079250704_2200613566.mp4'
+file 'file:/Users/smick/Developer/komma/site/video/media/videos/script/480p15/partial_movie_files/Scene6_Closing/1793889311_4029774746_453691495.mp4'
+file 'file:/Users/smick/Developer/komma/site/video/media/videos/script/480p15/partial_movie_files/Scene6_Closing/1793889311_4079250704_3137317279.mp4'
+file 'file:/Users/smick/Developer/komma/site/video/media/videos/script/480p15/partial_movie_files/Scene6_Closing/1793889311_4106221919_2119848112.mp4'
+file 'file:/Users/smick/Developer/komma/site/video/media/videos/script/480p15/partial_movie_files/Scene6_Closing/1793889311_1041675435_1436143290.mp4'
+file 'file:/Users/smick/Developer/komma/site/video/media/videos/script/480p15/partial_movie_files/Scene6_Closing/1793889311_3877907558_1466595303.mp4'
+file 'file:/Users/smick/Developer/komma/site/video/media/videos/script/480p15/partial_movie_files/Scene6_Closing/1793889311_1317920396_2358810818.mp4'
+file 'file:/Users/smick/Developer/komma/site/video/media/videos/script/480p15/partial_movie_files/Scene6_Closing/1793889311_2574473371_631829896.mp4'

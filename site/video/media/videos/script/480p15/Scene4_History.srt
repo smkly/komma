@@ -1,0 +1,12 @@
+1
+00:00:00,000 --> 00:00:02,000
+Every save is a commit
+
+2
+00:00:01,466 --> 00:00:04,466
+Full version history with git
+
+3
+00:00:05,933 --> 00:00:07,933
+Restore any previous version
+

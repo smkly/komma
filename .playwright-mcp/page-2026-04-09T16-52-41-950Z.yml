@@ -1,0 +1,193 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]:
+          - img "komma" [ref=e6]
+          - generic [ref=e7]:
+            - button "New document (⌘N)" [ref=e8] [cursor=pointer]:
+              - img [ref=e9]
+            - button "Browse files (⌘P)" [ref=e10] [cursor=pointer]:
+              - img [ref=e11]
+        - generic [ref=e13]:
+          - button "Switch to dark mode" [ref=e14] [cursor=pointer]:
+            - img [ref=e15]
+          - button "Settings" [ref=e17] [cursor=pointer]:
+            - img [ref=e18]
+          - button "Share" [ref=e21] [cursor=pointer]:
+            - img [ref=e22]
+            - text: Share
+          - button "Reload" [ref=e25] [cursor=pointer]:
+            - img [ref=e26]
+            - text: Reload
+          - button "Edit" [ref=e29] [cursor=pointer]:
+            - img [ref=e30]
+            - text: Edit
+    - button "Welcome" [ref=e34]:
+      - generic [ref=e36]: Welcome
+    - generic [ref=e37]:
+      - main [ref=e38]:
+        - generic [ref=e40]:
+          - img [ref=e41]
+          - generic [ref=e44]: komma
+          - generic [ref=e45]: Open a file to get started
+          - generic [ref=e46]:
+            - button "Open File" [ref=e47] [cursor=pointer]
+            - button "New Document" [ref=e48] [cursor=pointer]
+          - generic [ref=e49]:
+            - generic [ref=e50]: Recent Files
+            - button "readme.md/tmp/komma-test-vault" [ref=e51] [cursor=pointer]
+            - button "#/Users/smick/vault/docs" [ref=e52] [cursor=pointer]
+            - button "six-week-roadmap-apr-2026.md/Users/smick/vault/docs" [ref=e53] [cursor=pointer]
+            - button "mechanism-design-onchain.md/Users/smick/vault/research" [ref=e54] [cursor=pointer]
+            - button "commercial-hire-interview-prep.md/Users/smick/vault/docs" [ref=e55] [cursor=pointer]
+            - button "blank-research-purr-hyperliquid.md/Users/smick/vault/research/competitive" [ref=e56] [cursor=pointer]
+            - button "strategy-ops-spec-april-2026.md/Users/smick/vault/strategy" [ref=e57] [cursor=pointer]
+            - button "heater-product-deepdive.md/Users/smick/vault/research/prediction-markets" [ref=e58] [cursor=pointer]
+            - button "prediction_market_platform_incentives.md/Users/smick/vault/research/prediction-markets" [ref=e59] [cursor=pointer]
+            - button "prediction-market-incentive-opportunity.md/Users/smick/vault/research/prediction-markets" [ref=e60] [cursor=pointer]
+            - button "HEATER_BRIEFING.md/Users/smick/vault/research/prediction-markets" [ref=e61] [cursor=pointer]
+            - button "matrica-torque-partnership-analysis.md/Users/smick/vault/research/customer-specs" [ref=e62] [cursor=pointer]
+            - button "dflow-bridge-reality-check.md/Users/smick/vault/research/prediction-markets" [ref=e63] [cursor=pointer]
+            - button "memecoin-prediction-market-wallet-overlap.md/Users/smick/vault/research/prediction-markets" [ref=e64] [cursor=pointer]
+            - button "kalshi-dflow-dune-analytics.md/Users/smick/vault/research/prediction-markets" [ref=e65] [cursor=pointer]
+            - button "torque-predict-sports-betting.md/Users/smick/vault/wiki/synthesis" [ref=e66] [cursor=pointer]
+            - button "kalshi-dflow-dune-analytics.md/Users/smick/vault/research" [ref=e67] [cursor=pointer]
+            - button "prediction-market-incentive-opportunity.md/Users/smick/vault/strategy" [ref=e68] [cursor=pointer]
+            - button "matrica-torque-partnership-analysis.md/Users/smick/vault" [ref=e69] [cursor=pointer]
+            - button "phantom-trading-rebates-discovery.md/Users/smick/vault" [ref=e70] [cursor=pointer]
+      - complementary [ref=e71]:
+        - generic [ref=e73]:
+          - button "Contents" [ref=e74]:
+            - img [ref=e76]
+          - button "Edits" [ref=e77]:
+            - img [ref=e80]
+          - button "Chat" [ref=e83]:
+            - img [ref=e85]
+          - button "History" [ref=e87]:
+            - img [ref=e89]
+        - generic [ref=e93]:
+          - generic [ref=e94]:
+            - button "Add Comment to Selection" [ref=e95]:
+              - img [ref=e96]
+              - text: Add Comment to Selection
+            - generic [ref=e98]:
+              - img [ref=e99]
+              - generic [ref=e102]:
+                - combobox [ref=e103] [cursor=pointer]:
+                  - option "Haiku"
+                  - option "Sonnet" [selected]
+                  - option "Opus"
+                - img
+          - button "View Last Output" [ref=e104]:
+            - img [ref=e105]
+            - text: View Last Output
+          - paragraph [ref=e108]: Select text and add comments, then send to Claude
+    - generic [ref=e127]:
+      - generic [ref=e128]:
+        - generic [ref=e129]:
+          - img [ref=e130]
+          - heading "Open File" [level=2] [ref=e132]
+        - button [ref=e133]:
+          - img [ref=e134]
+      - generic [ref=e137]:
+        - button "Go up" [ref=e138]:
+          - img [ref=e139]
+        - textbox "/Users/smick" [active] [ref=e141]
+      - generic [ref=e142]:
+        - paragraph [ref=e143]: Recent Files
+        - generic [ref=e144]:
+          - button "readme.md" [ref=e145]
+          - button "#" [ref=e146]
+          - button "six-week-roadmap-apr-2026.md" [ref=e147]
+          - button "mechanism-design-onchain.md" [ref=e148]
+          - button "commercial-hire-interview-prep.md" [ref=e149]
+          - button "blank-research-purr-hyperliquid.md" [ref=e150]
+          - button "strategy-ops-spec-april-2026.md" [ref=e151]
+          - button "heater-product-deepdive.md" [ref=e152]
+          - button "prediction_market_platform_incentives.md" [ref=e153]
+          - button "prediction-market-incentive-opportunity.md" [ref=e154]
+          - button "HEATER_BRIEFING.md" [ref=e155]
+          - button "matrica-torque-partnership-analysis.md" [ref=e156]
+          - button "dflow-bridge-reality-check.md" [ref=e157]
+          - button "memecoin-prediction-market-wallet-overlap.md" [ref=e158]
+          - button "kalshi-dflow-dune-analytics.md" [ref=e159]
+          - button "torque-predict-sports-betting.md" [ref=e160]
+          - button "kalshi-dflow-dune-analytics.md" [ref=e161]
+          - button "prediction-market-incentive-opportunity.md" [ref=e162]
+          - button "matrica-torque-partnership-analysis.md" [ref=e163]
+          - button "phantom-trading-rebates-discovery.md" [ref=e164]
+      - generic [ref=e166]:
+        - generic [ref=e167] [cursor=pointer]:
+          - img [ref=e168]
+          - generic [ref=e170]: Applications
+          - img [ref=e171]
+        - generic [ref=e173] [cursor=pointer]:
+          - img [ref=e174]
+          - generic [ref=e176]: Desktop
+          - img [ref=e177]
+        - generic [ref=e179] [cursor=pointer]:
+          - img [ref=e180]
+          - generic [ref=e182]: Developer
+          - img [ref=e183]
+        - generic [ref=e185] [cursor=pointer]:
+          - img [ref=e186]
+          - generic [ref=e188]: Documents
+          - img [ref=e189]
+        - generic [ref=e191] [cursor=pointer]:
+          - img [ref=e192]
+          - generic [ref=e194]: Downloads
+          - img [ref=e195]
+        - generic [ref=e197] [cursor=pointer]:
+          - img [ref=e198]
+          - generic [ref=e200]: go
+          - img [ref=e201]
+        - generic [ref=e203] [cursor=pointer]:
+          - img [ref=e204]
+          - generic [ref=e206]: Library
+          - img [ref=e207]
+        - generic [ref=e209] [cursor=pointer]:
+          - img [ref=e210]
+          - generic [ref=e212]: Movies
+          - img [ref=e213]
+        - generic [ref=e215] [cursor=pointer]:
+          - img [ref=e216]
+          - generic [ref=e218]: Music
+          - img [ref=e219]
+        - generic [ref=e221] [cursor=pointer]:
+          - img [ref=e222]
+          - generic [ref=e224]: personal
+          - img [ref=e225]
+        - generic [ref=e227] [cursor=pointer]:
+          - img [ref=e228]
+          - generic [ref=e230]: Pictures
+          - img [ref=e231]
+        - generic [ref=e233] [cursor=pointer]:
+          - img [ref=e234]
+          - generic [ref=e236]: Public
+          - img [ref=e237]
+        - generic [ref=e239] [cursor=pointer]:
+          - img [ref=e240]
+          - generic [ref=e242]: Torque
+          - img [ref=e243]
+        - generic [ref=e245] [cursor=pointer]:
+          - img [ref=e246]
+          - generic [ref=e248]: vault
+          - img [ref=e249]
+      - generic [ref=e251]:
+        - generic [ref=e252]:
+          - generic [ref=e253]: ↑↓ navigate
+          - generic [ref=e254]: ↵ open
+          - generic [ref=e255]: ⌫ up dir
+          - generic [ref=e256]: esc close
+        - button "Cancel" [ref=e257]
+    - generic [ref=e109]:
+      - generic [ref=e110]:
+        - generic [ref=e111]: NORMAL
+        - generic [ref=e112]: Enter edit j/k move w/b word 0/$ ends gg/G jump / search
+      - generic [ref=e113]:
+        - generic [ref=e114]: Ln 1:1
+        - generic [ref=e115] [cursor=pointer]: VIM
+  - button "Open Next.js Dev Tools" [ref=e121] [cursor=pointer]:
+    - img [ref=e122]
+  - alert [ref=e125]

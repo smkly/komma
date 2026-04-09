@@ -1,0 +1,12 @@
+1
+00:00:00,000 --> 00:00:02,000
+Claude knows your whole library
+
+2
+00:00:02,066 --> 00:00:05,066
+Reference any document with @ mentions
+
+3
+00:00:04,066 --> 00:00:07,066
+Claude responds with full context
+

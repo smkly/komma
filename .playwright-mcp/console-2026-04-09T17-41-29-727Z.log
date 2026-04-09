@@ -1,0 +1,110 @@
+[     200ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[     283ms] [LOG] [HMR] connected @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_f3530cac._.js:2297
+[     362ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://localhost:54645/api/chat?document_path=:0
+[     369ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://localhost:54645/api/chat?document_path=:0
+[     374ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://localhost:54645/api/chat?document_path=:0
+[    6102ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[    7105ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[    8107ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[    9110ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[   10113ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[   13904ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/files?path=:0
+[   13904ms] [ERROR] Failed to load directory: TypeError: Failed to fetch
+    at FileBrowser.useCallback[loadBrowserDirectory] (http://localhost:54645/_next/static/chunks/src_app_components_a48c2aac._.js:6497:35)
+    at FileBrowser.useEffect (http://localhost:54645/_next/static/chunks/src_app_components_a48c2aac._.js:6563:17)
+    at Object.react_stack_bottom_frame (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:14876:22)
+    at runWithFiberInDEV (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:965:74)
+    at commitHookEffectListMount (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:7266:167)
+    at commitHookPassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:7301:60)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8696:33)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8757:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8757:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8757:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8700:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8700:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8700:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8757:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8757:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8695:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316)
+    at commitPassiveMountOnFiber (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8757:17)
+    at recursivelyTraversePassiveMountEffects (http://localhost:54645/_next/static/chunks/node_modules_next_dist_compiled_react-dom_1e674e59._.js:8683:316) @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_f3530cac._.js:3127
+[   13926ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/__nextjs_font/geist-latin.woff2:0
+[   13933ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/__nextjs_original-stack-frames:0
+[   15130ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/file?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   15133ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/comments?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   15133ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/changelogs?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   15133ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/frontmatter?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   15133ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/chat?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   15138ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[   16136ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/chat?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   16633ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/file?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   16634ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/comments?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   16634ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/changelogs?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   16634ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/frontmatter?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   18139ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/chat?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   19636ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/file?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   19637ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/comments?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   19637ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/changelogs?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   19637ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/frontmatter?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   20140ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[   24141ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/file?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   24141ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/comments?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   24141ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/changelogs?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   24141ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/frontmatter?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   25145ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[   30145ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/file?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   30145ms] [ERROR] Failed to load document: Error: Failed to fetch /api/file?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md
+    at useDocument.useCallback[loadDocument].fetchWithRetry (http://localhost:54645/_next/static/chunks/src_app_hooks_be2f7edb._.js:182:58)
+    at async Promise.all (index 0)
+    at async useDocument.useCallback[loadDocument] [as loadDocument] (http://localhost:54645/_next/static/chunks/src_app_hooks_be2f7edb._.js:200:79)
+    at async Home.useCallback[loadDocument] (http://localhost:54645/_next/static/chunks/src_app_page_tsx_b4090435._.js:713:28) @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_f3530cac._.js:3127
+[   30146ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/comments?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   30146ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/changelogs?document_path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   30146ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/api/frontmatter?path=%2FUsers%2Fsmick%2Fkomma-test-vault%2FREADME.md:0
+[   30166ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/src_app_components_51c9248f._.js:0
+[   30166ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_prosemirror-view_dist_index_21ada2c5.js:0
+[   30166ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_%40tiptap_core_dist_f5afb391._.js:0
+[   30166ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_5181cb82._.js:0
+[   30166ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/src_app_components_RichEditor_tsx_7e19f9f3._.js:0
+[   30178ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[   30184ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/__nextjs_original-stack-frames:0
+[   30468ms] ChunkLoadError: Failed to load chunk /_next/static/chunks/src_app_components_51c9248f._.js from module [project]/src/app/components/RichEditor.tsx [app-client] (ecmascript, next/dynamic entry, async loader)
+    at http://localhost:54645/_next/static/chunks/turbopack-_23a915ee._.js:656:25
+    at async Promise.all (index 0)
+[   30472ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/__nextjs_original-stack-frames:0
+[   30494ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/__nextjs_font/geist-mono-latin.woff2:0
+[   35188ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[   40193ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878
+[   45198ms] [ERROR] WebSocket connection to 'ws://localhost:54645/_next/webpack-hmr?id=6k7EwuVxt_HrSZdZS0jBj' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:54645/_next/static/chunks/node_modules_next_dist_client_17643121._.js:10878

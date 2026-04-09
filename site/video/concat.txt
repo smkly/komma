@@ -1,0 +1,6 @@
+file 'media/videos/script/480p15/Scene1_Title.mp4'
+file 'media/videos/script/480p15/Scene2_Editor.mp4'
+file 'media/videos/script/480p15/Scene3_Approval.mp4'
+file 'media/videos/script/480p15/Scene4_History.mp4'
+file 'media/videos/script/480p15/Scene5_Vault.mp4'
+file 'media/videos/script/480p15/Scene6_Closing.mp4'

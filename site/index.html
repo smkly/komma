@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Komma - AI-powered markdown editor</title>
+  <meta name="description" content="A rich, open source markdown editor where Claude edits with you, not for you. Approve every change. Track every version.">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 256 256' fill='none'%3E%3Crect width='256' height='256' rx='56' fill='%23151722'/%3E%3Cg transform='translate(78,18) scale(0.0435,-0.0435) translate(0,-5060)' fill='%236E57FF'%3E%3Cpath d='M354 5050 c-11 -4 -33 -22 -47 -40 l-27 -32 0 -1336 c0 -1305 1 -1338 19 -1366 35 -53 46 -55 309 -56 272 0 292 4 318 65 12 29 14 236 14 1350 0 1448 4 1365 -62 1405 -31 19 -49 20 -268 19 -129 0 -244 -4 -256 -9z'/%3E%3Cpath d='M1080 2805 l0 -875 155 0 c105 0 155 -3 155 -11 0 -24 -61 -250 -90 -334 -82 -238 -271 -560 -452 -770 -200 -232 -503 -500 -775 -683 -66 -44 -81 -69 -63 -102 52 -97 539 56 932 293 315 190 642 468 838 711 272 337 464 771 521 1176 19 135 16 401 -6 525 -69 399 -276 689 -596 839 -155 72 -321 106 -526 106 l-93 0 0 -875z'/%3E%3C/g%3E%3C/svg%3E">
+  <style>
+    :root {
+      --bg: #FAFBFE;
+      --bg-secondary: #f0f0f5;
+      --fg: #1a1a2e;
+      --fg-muted: #6b6b80;
+      --fg-faint: #9b9bae;
+      --accent: #6E57FF;
+      --accent-soft: rgba(110, 87, 255, 0.08);
+      --accent-glow: rgba(110, 87, 255, 0.15);
+      --border: rgba(0, 0, 0, 0.06);
+      --card-bg: #fff;
+      --code-bg: #f4f4f8;
+      --green: #2ea043;
+      --green-bg: rgba(46, 160, 67, 0.08);
+      --red: #cf222e;
+      --red-bg: rgba(207, 34, 46, 0.06);
+      --mockup-bg: #1b1d2e;
+      --mockup-fg: #e0e0ea;
+      --mockup-muted: #6b6d80;
+      --mockup-border: rgba(255,255,255,0.06);
+      --mockup-sidebar: #151722;
+      --radius: 16px;
+    }
+
+    [data-theme="dark"] {
+      --bg: #0b0c14;
+      --bg-secondary: #12131f;
+      --fg: #e8e8f0;
+      --fg-muted: #8b8ba0;
+      --fg-faint: #5b5b70;
+      --border: rgba(255, 255, 255, 0.06);
+      --card-bg: #151722;
+      --code-bg: #1b1d2e;
+      --green-bg: rgba(46, 160, 67, 0.12);
+      --red-bg: rgba(207, 34, 46, 0.1);
+      --accent-soft: rgba(110, 87, 255, 0.12);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.6;
+      transition: background 0.3s, color 0.3s;
+    }
+
+    /* ---- Layout ---- */
+    .container {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .container-wide {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* ---- Header ---- */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      background: color-mix(in srgb, var(--bg) 85%, transparent);
+    }
+
+    header .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      color: var(--fg);
+      font-weight: 600;
+      font-size: 1.05rem;
+      letter-spacing: -0.01em;
+    }
+
+    .logo svg {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+    }
+
+    nav a {
+      color: var(--fg-muted);
+      text-decoration: none;
+      font-size: 0.88rem;
+      transition: color 0.2s;
+    }
+
+    nav a:hover { color: var(--fg); }
+
+    .theme-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--fg-muted);
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      transition: color 0.2s;
+    }
+    .theme-toggle:hover { color: var(--fg); }
+
+    /* ---- Hero ---- */
+    .hero {
+      padding: 80px 0 60px;
+      text-align: center;
+    }
+
+    .hero-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 20px;
+      margin: 0 auto 32px;
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      max-width: 720px;
+      margin: 0 auto 20px;
+    }
+
+    .hero h1 .accent {
+      color: var(--accent);
+    }
+
+    .hero .subtitle {
+      font-size: 1.15rem;
+      color: var(--fg-muted);
+      max-width: 540px;
+      margin: 0 auto 36px;
+      line-height: 1.55;
+    }
+
+    .cta-group {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(110, 87, 255, 0.35);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      border: 1px solid rgba(110, 87, 255, 0.15);
+      padding: 11px 24px;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 500;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-secondary:hover {
+      background: var(--accent-glow);
+    }
+
+    .hero-note {
+      margin-top: 14px;
+      font-size: 0.8rem;
+      color: var(--fg-faint);
+    }
+
+    /* ---- Hero Mockup ---- */
+    .hero-mockup {
+      margin: 56px auto 0;
+      max-width: 960px;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    [data-theme="dark"] .hero-mockup {
+      box-shadow: 0 8px 40px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    /* ---- Feature Sections ---- */
+    .features {
+      padding: 40px 0 80px;
+    }
+
+    .feature-section {
+      padding: 64px 0;
+    }
+
+    .feature-label {
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      margin-bottom: 12px;
+      font-weight: 600;
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 56px;
+      align-items: center;
+    }
+
+    .feature-grid.reverse .feature-text { order: 2; }
+    .feature-grid.reverse .feature-visual { order: 1; }
+
+    .feature-text h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.2;
+      margin-bottom: 16px;
+    }
+
+    .feature-text p {
+      color: var(--fg-muted);
+      font-size: 0.98rem;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .feature-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .feature-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 0.9rem;
+      color: var(--fg-muted);
+      line-height: 1.5;
+    }
+
+    .feature-list li svg {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      margin-top: 3px;
+      color: var(--accent);
+    }
+
+    .feature-visual {
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    /* ---- Mockup UI Components ---- */
+    .mockup {
+      background: var(--mockup-bg);
+      color: var(--mockup-fg);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.78rem;
+      line-height: 1.7;
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .mockup-titlebar {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 12px 16px;
+      background: var(--mockup-sidebar);
+      border-bottom: 1px solid var(--mockup-border);
+    }
+
+    .mockup-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+    }
+    .mockup-dot.red { background: #ff5f57; }
+    .mockup-dot.yellow { background: #febc2e; }
+    .mockup-dot.green { background: #28c840; }
+
+    .mockup-body {
+      padding: 20px 24px;
+    }
+
+    .mockup-layout {
+      display: flex;
+    }
+
+    .mockup-sidebar {
+      width: 200px;
+      background: var(--mockup-sidebar);
+      padding: 16px;
+      border-right: 1px solid var(--mockup-border);
+      flex-shrink: 0;
+    }
+
+    .mockup-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .mockup-sidebar-item {
+      padding: 5px 10px;
+      border-radius: 6px;
+      color: var(--mockup-muted);
+      font-size: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .mockup-sidebar-item.active {
+      background: rgba(110, 87, 255, 0.12);
+      color: var(--mockup-fg);
+    }
+    .mockup-sidebar-item svg {
+      width: 14px;
+      height: 14px;
+      opacity: 0.5;
+    }
+
+    /* Diff mockup */
+    .diff-line {
+      display: flex;
+      padding: 2px 0;
+    }
+    .diff-num {
+      width: 32px;
+      text-align: right;
+      color: var(--mockup-muted);
+      opacity: 0.4;
+      margin-right: 16px;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .diff-content {
+      flex: 1;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 0.85rem;
+    }
+    .diff-line.removed .diff-content {
+      background: rgba(207, 34, 46, 0.15);
+      color: #f08080;
+      text-decoration: line-through;
+      border-radius: 3px;
+      padding: 0 4px;
+    }
+    .diff-line.added .diff-content {
+      background: rgba(46, 160, 67, 0.15);
+      color: #7ee09b;
+      border-radius: 3px;
+      padding: 0 4px;
+    }
+
+    /* Approval buttons */
+    .mockup-approval {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--mockup-border);
+    }
+    .mockup-btn {
+      padding: 5px 14px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-weight: 500;
+      border: none;
+      cursor: default;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .mockup-btn.approve {
+      background: rgba(46, 160, 67, 0.15);
+      color: #7ee09b;
+    }
+    .mockup-btn.reject {
+      background: rgba(207, 34, 46, 0.12);
+      color: #f08080;
+    }
+    .mockup-btn.revise {
+      background: rgba(110, 87, 255, 0.12);
+      color: #a89aff;
+    }
+
+    /* Comment mockup */
+    .mockup-comment {
+      background: rgba(110, 87, 255, 0.06);
+      border-left: 2px solid var(--accent);
+      padding: 10px 14px;
+      margin: 8px 0;
+      border-radius: 0 8px 8px 0;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 0.82rem;
+    }
+    .mockup-comment-meta {
+      font-size: 0.7rem;
+      color: var(--mockup-muted);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mockup-comment-meta .badge {
+      background: rgba(110, 87, 255, 0.2);
+      color: #a89aff;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 600;
+    }
+
+    /* Git history mockup */
+    .mockup-timeline {
+      padding: 4px 0;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .timeline-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 8px 0;
+      font-size: 0.82rem;
+    }
+    .timeline-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: 5px;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .timeline-dot::after {
+      content: '';
+      position: absolute;
+      left: 3px;
+      top: 10px;
+      width: 2px;
+      height: 28px;
+      background: rgba(110, 87, 255, 0.15);
+    }
+    .timeline-item:last-child .timeline-dot::after { display: none; }
+
+    .timeline-dot.green { background: var(--green); }
+    .timeline-dot.green::after { background: rgba(46, 160, 67, 0.15); }
+
+    .timeline-info {
+      flex: 1;
+    }
+    .timeline-title {
+      color: var(--mockup-fg);
+      font-weight: 500;
+    }
+    .timeline-meta {
+      color: var(--mockup-muted);
+      font-size: 0.72rem;
+      margin-top: 2px;
+    }
+    .timeline-badge {
+      font-size: 0.65rem;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .timeline-badge.ai {
+      background: rgba(110, 87, 255, 0.15);
+      color: #a89aff;
+    }
+    .timeline-badge.save {
+      background: rgba(46, 160, 67, 0.12);
+      color: #7ee09b;
+    }
+    .timeline-badge.review {
+      background: rgba(253, 176, 34, 0.12);
+      color: #fdb022;
+    }
+
+    /* Vault mockup */
+    .mockup-mention {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(110, 87, 255, 0.12);
+      color: #a89aff;
+      padding: 1px 8px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .mockup-editor-text {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 0.88rem;
+      line-height: 1.75;
+      color: var(--mockup-fg);
+      padding: 20px 24px;
+    }
+    .mockup-editor-text .heading {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .mockup-editor-text .muted {
+      color: var(--mockup-muted);
+    }
+
+    /* ---- CTA Section ---- */
+    .cta-section {
+      text-align: center;
+      padding: 80px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .cta-section h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      margin-bottom: 12px;
+    }
+
+    .cta-section p {
+      color: var(--fg-muted);
+      font-size: 1rem;
+      margin-bottom: 32px;
+      max-width: 480px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    /* ---- Footer ---- */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+    }
+
+    footer .container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .footer-left {
+      font-size: 0.82rem;
+      color: var(--fg-faint);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 20px;
+    }
+
+    .footer-links a {
+      font-size: 0.82rem;
+      color: var(--fg-faint);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--accent); }
+
+    /* ---- Responsive ---- */
+    @media (max-width: 768px) {
+      .feature-grid {
+        grid-template-columns: 1fr;
+        gap: 32px;
+      }
+      .feature-grid.reverse .feature-text { order: 1; }
+      .feature-grid.reverse .feature-visual { order: 2; }
+
+      .hero { padding: 48px 0 40px; }
+      .hero-mockup { margin-top: 40px; }
+      .feature-section { padding: 40px 0; }
+
+      .mockup-sidebar { display: none; }
+
+      nav { gap: 16px; }
+      nav a { font-size: 0.82rem; }
+
+      footer .container {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+      }
+    }
+
+    /* ---- Animations ---- */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .fade-in.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="container">
+      <a href="/" class="logo">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 256 256" fill="none">
+          <rect width="256" height="256" rx="56" fill="#151722"/>
+          <g transform="translate(78,18) scale(0.0435,-0.0435) translate(0,-5060)" fill="#6E57FF">
+            <path d="M354 5050 c-11 -4 -33 -22 -47 -40 l-27 -32 0 -1336 c0 -1305 1 -1338 19 -1366 35 -53 46 -55 309 -56 272 0 292 4 318 65 12 29 14 236 14 1350 0 1448 4 1365 -62 1405 -31 19 -49 20 -268 19 -129 0 -244 -4 -256 -9z"/>
+            <path d="M1080 2805 l0 -875 155 0 c105 0 155 -3 155 -11 0 -24 -61 -250 -90 -334 -82 -238 -271 -560 -452 -770 -200 -232 -503 -500 -775 -683 -66 -44 -81 -69 -63 -102 52 -97 539 56 932 293 315 190 642 468 838 711 272 337 464 771 521 1176 19 135 16 401 -6 525 -69 399 -276 689 -596 839 -155 72 -321 106 -526 106 l-93 0 0 -875z"/>
+          </g>
+        </svg>
+        komma
+      </a>
+      <nav>
+        <a href="https://github.com/smkly/komma">GitHub</a>
+        <a href="https://github.com/smkly/komma/releases">Releases</a>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 256 256' fill='none'%3E%3Crect width='256' height='256' rx='56' fill='%23151722'/%3E%3Cg transform='translate(78,18) scale(0.0435,-0.0435) translate(0,-5060)' fill='%236E57FF'%3E%3Cpath d='M354 5050 c-11 -4 -33 -22 -47 -40 l-27 -32 0 -1336 c0 -1305 1 -1338 19 -1366 35 -53 46 -55 309 -56 272 0 292 4 318 65 12 29 14 236 14 1350 0 1448 4 1365 -62 1405 -31 19 -49 20 -268 19 -129 0 -244 -4 -256 -9z'/%3E%3Cpath d='M1080 2805 l0 -875 155 0 c105 0 155 -3 155 -11 0 -24 -61 -250 -90 -334 -82 -238 -271 -560 -452 -770 -200 -232 -503 -500 -775 -683 -66 -44 -81 -69 -63 -102 52 -97 539 56 932 293 315 190 642 468 838 711 272 337 464 771 521 1176 19 135 16 401 -6 525 -69 399 -276 689 -596 839 -155 72 -321 106 -526 106 l-93 0 0 -875z'/%3E%3C/g%3E%3Cg transform='translate(78,18) scale(0.0435,-0.0435) translate(0,-5060)' fill='%236E57FF' opacity='0.25'%3E%3Cpath d='M354 5050 c-11 -4 -33 -22 -47 -40 l-27 -32 0 -1336 c0 -1305 1 -1338 19 -1366 35 -53 46 -55 309 -56 272 0 292 4 318 65 12 29 14 236 14 1350 0 1448 4 1365 -62 1405 -31 19 -49 20 -268 19 -129 0 -244 -4 -256 -9z'/%3E%3Cpath d='M1080 2805 l0 -875 155 0 c105 0 155 -3 155 -11 0 -24 -61 -250 -90 -334 -82 -238 -271 -560 -452 -770 -200 -232 -503 -500 -775 -683 -66 -44 -81 -69 -63 -102 52 -97 539 56 932 293 315 190 642 468 838 711 272 337 464 771 521 1176 19 135 16 401 -6 525 -69 399 -276 689 -596 839 -155 72 -321 106 -526 106 l-93 0 0 -875z'/%3E%3C/g%3E%3C/svg%3E" alt="Komma" class="hero-icon">
+      <h1>A markdown editor where AI <span class="accent">edits with you, not for you</span></h1>
+      <p class="subtitle">Approve every change. Track every version. Your vault, your documents, your control.</p>
+      <div class="cta-group">
+        <a href="https://github.com/smkly/komma/releases/latest" class="btn-primary">
+          Download for macOS
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="https://github.com/smkly/komma" class="btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          View source
+        </a>
+      </div>
+      <p class="hero-note">macOS 12+ &middot; Free &amp; open source &middot; AGPL-3.0</p>
+    </div>
+
+    <!-- Hero Mockup: approval flow -->
+    <div class="container-wide">
+      <div class="hero-mockup fade-in">
+        <div class="mockup">
+          <div class="mockup-titlebar">
+            <span class="mockup-dot red"></span>
+            <span class="mockup-dot yellow"></span>
+            <span class="mockup-dot green"></span>
+          </div>
+          <div class="mockup-layout">
+            <div class="mockup-sidebar">
+              <div style="font-family: -apple-system, sans-serif; font-size: 0.7rem; color: var(--mockup-muted); text-transform: uppercase; letter-spacing: 0.08em; padding: 4px 10px 8px; font-weight: 600;">Vault</div>
+              <div class="mockup-sidebar-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                README.md
+              </div>
+              <div class="mockup-sidebar-item active">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                product-spec.md
+              </div>
+              <div class="mockup-sidebar-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                meeting-notes.md
+              </div>
+              <div class="mockup-sidebar-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                architecture.md
+              </div>
+            </div>
+            <div class="mockup-main">
+              <div class="mockup-body">
+                <div class="mockup-comment">
+                  <div class="mockup-comment-meta">
+                    <span class="badge">Cmd+K</span>
+                    <span>Make this section more concise and action-oriented</span>
+                  </div>
+                </div>
+                <div style="margin-top: 16px;">
+                  <div class="diff-line removed">
+                    <span class="diff-num">12</span>
+                    <span class="diff-content">The product should be designed to provide users with a comprehensive</span>
+                  </div>
+                  <div class="diff-line removed">
+                    <span class="diff-num">13</span>
+                    <span class="diff-content">set of tools that will enable them to accomplish their goals efficiently.</span>
+                  </div>
+                  <div class="diff-line added">
+                    <span class="diff-num">12</span>
+                    <span class="diff-content">Ship tools that get out of the way. Users should accomplish goals, not learn features.</span>
+                  </div>
+                  <div style="height: 8px;"></div>
+                  <div class="diff-line removed">
+                    <span class="diff-num">15</span>
+                    <span class="diff-content">It is important that the interface is intuitive and easy to understand</span>
+                  </div>
+                  <div class="diff-line removed">
+                    <span class="diff-num">16</span>
+                    <span class="diff-content">for users of all skill levels and backgrounds.</span>
+                  </div>
+                  <div class="diff-line added">
+                    <span class="diff-num">15</span>
+                    <span class="diff-content">The interface should be obvious. If it needs a tutorial, redesign it.</span>
+                  </div>
+                </div>
+                <div class="mockup-approval">
+                  <div class="mockup-btn approve">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    Accept
+                  </div>
+                  <div class="mockup-btn reject">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Reject
+                  </div>
+                  <div class="mockup-btn revise">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    Revise
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features">
+    <div class="container">
+
+      <!-- 1. Agent Approval Flow -->
+      <div class="feature-section fade-in">
+        <div class="feature-grid">
+          <div class="feature-text">
+            <div class="feature-label">Agent Workflow</div>
+            <h2>Every change needs your approval</h2>
+            <p>Highlight text, press Cmd+K, and describe what you want. Claude proposes changes as a diff. You approve, reject, or revise each one individually.</p>
+            <ul class="feature-list">
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Inline diff view with clear before/after
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Granular accept/reject per change, not per session
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Revise any suggestion with follow-up instructions
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Original always preserved until you accept
+              </li>
+            </ul>
+          </div>
+          <div class="feature-visual">
+            <div class="mockup">
+              <div class="mockup-titlebar">
+                <span class="mockup-dot red"></span>
+                <span class="mockup-dot yellow"></span>
+                <span class="mockup-dot green"></span>
+                <span style="font-family: -apple-system, sans-serif; font-size: 0.72rem; color: var(--mockup-muted); margin-left: 8px;">Edits</span>
+              </div>
+              <div class="mockup-body">
+                <div class="mockup-comment">
+                  <div class="mockup-comment-meta">
+                    <span class="badge">Edit</span>
+                    <span>Tighten the introduction</span>
+                  </div>
+                </div>
+                <div style="margin-top: 12px;">
+                  <div class="diff-line removed">
+                    <span class="diff-num">3</span>
+                    <span class="diff-content">This document will outline the various aspects of</span>
+                  </div>
+                  <div class="diff-line removed">
+                    <span class="diff-num">4</span>
+                    <span class="diff-content">our approach to building the new platform.</span>
+                  </div>
+                  <div class="diff-line added">
+                    <span class="diff-num">3</span>
+                    <span class="diff-content">Here's how we're building the new platform.</span>
+                  </div>
+                </div>
+                <div class="mockup-approval">
+                  <div class="mockup-btn approve">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    Accept
+                  </div>
+                  <div class="mockup-btn reject">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Reject
+                  </div>
+                  <div class="mockup-btn revise">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                    Revise
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Git-based Version Control -->
+      <div class="feature-section fade-in">
+        <div class="feature-grid reverse">
+          <div class="feature-text">
+            <div class="feature-label">Version History</div>
+            <h2>Every save is a commit. Every version, recoverable.</h2>
+            <p>Your documents are tracked in git automatically. Browse the full history, restore any version, and push to GitHub for review -- all without leaving the editor.</p>
+            <ul class="feature-list">
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v6M12 15v6"/></svg>
+                Auto-commit on every save with full diff history
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+                One-click restore to any previous version
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 22h4a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v3"/><polyline points="14 2 14 8 20 8"/><path d="m 3 18 3-3-3-3"/><path d="M7 15h6"/></svg>
+                Submit for Review creates a PR on GitHub
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                Pull GitHub review comments into Komma
+              </li>
+            </ul>
+          </div>
+          <div class="feature-visual">
+            <div class="mockup">
+              <div class="mockup-titlebar">
+                <span class="mockup-dot red"></span>
+                <span class="mockup-dot yellow"></span>
+                <span class="mockup-dot green"></span>
+                <span style="font-family: -apple-system, sans-serif; font-size: 0.72rem; color: var(--mockup-muted); margin-left: 8px;">History</span>
+              </div>
+              <div class="mockup-body">
+                <div class="mockup-timeline">
+                  <div class="timeline-item">
+                    <span class="timeline-dot"></span>
+                    <div class="timeline-info">
+                      <div class="timeline-title">Tightened introduction <span class="timeline-badge ai">Claude edit</span></div>
+                      <div class="timeline-meta">Just now &middot; +1 / -4 lines</div>
+                    </div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-dot green"></span>
+                    <div class="timeline-info">
+                      <div class="timeline-title">Added technical requirements <span class="timeline-badge save">Saved</span></div>
+                      <div class="timeline-meta">5 minutes ago &middot; +12 lines</div>
+                    </div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-dot"></span>
+                    <div class="timeline-info">
+                      <div class="timeline-title">Rewrote goals section <span class="timeline-badge ai">Claude edit</span></div>
+                      <div class="timeline-meta">12 minutes ago &middot; +3 / -8 lines</div>
+                    </div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-dot" style="background: #fdb022;"></span>
+                    <div class="timeline-info">
+                      <div class="timeline-title">Submitted for review <span class="timeline-badge review">PR #14</span></div>
+                      <div class="timeline-meta">Yesterday</div>
+                    </div>
+                  </div>
+                  <div class="timeline-item">
+                    <span class="timeline-dot green"></span>
+                    <div class="timeline-info">
+                      <div class="timeline-title">Initial draft <span class="timeline-badge save">Saved</span></div>
+                      <div class="timeline-meta">2 days ago</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Vault & Context -->
+      <div class="feature-section fade-in">
+        <div class="feature-grid">
+          <div class="feature-text">
+            <div class="feature-label">Vault Intelligence</div>
+            <h2>Claude knows your whole library</h2>
+            <p>Point Komma at a vault of markdown files. Use @-mentions to give Claude context from any document, architecture file, or connected MCP server.</p>
+            <ul class="feature-list">
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+                <span><strong>@vault</strong> includes your full file index as context</span>
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+                <span><strong>@filename.md</strong> references any document by path</span>
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                <span><strong>@mcp:server</strong> pulls in live data from connected tools</span>
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                Plain markdown on disk. No lock-in, no cloud sync required
+              </li>
+            </ul>
+          </div>
+          <div class="feature-visual">
+            <div class="mockup">
+              <div class="mockup-titlebar">
+                <span class="mockup-dot red"></span>
+                <span class="mockup-dot yellow"></span>
+                <span class="mockup-dot green"></span>
+                <span style="font-family: -apple-system, sans-serif; font-size: 0.72rem; color: var(--mockup-muted); margin-left: 8px;">Chat</span>
+              </div>
+              <div class="mockup-body" style="padding: 16px 20px;">
+                <div style="font-family: -apple-system, sans-serif;">
+                  <div style="background: rgba(110, 87, 255, 0.08); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; font-size: 0.85rem; color: var(--mockup-fg);">
+                    <div style="font-size: 0.7rem; color: var(--mockup-muted); margin-bottom: 6px; font-weight: 500;">You</div>
+                    Summarize how our API auth works. Reference <span class="mockup-mention">@architecture</span> and <span class="mockup-mention">@docs/auth.md</span>
+                  </div>
+                  <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--mockup-border); border-radius: 10px; padding: 12px 14px; font-size: 0.85rem; color: var(--mockup-fg);">
+                    <div style="font-size: 0.7rem; color: #a89aff; margin-bottom: 6px; font-weight: 500;">Claude</div>
+                    Based on your architecture doc and auth module:<br><br>
+                    <strong>Authentication uses JWT tokens</strong> issued by the gateway service. Tokens are validated at the edge via middleware before reaching handlers. Refresh tokens rotate on each use with a 7-day sliding window...<br><br>
+                    <span style="color: var(--mockup-muted); font-size: 0.8rem;">Want me to update the spec to match this?</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Writing -->
+      <div class="feature-section fade-in">
+        <div class="feature-grid reverse">
+          <div class="feature-text">
+            <div class="feature-label">Writing</div>
+            <h2>A proper editor, not a prompt box</h2>
+            <p>Rich markdown editing with a clean, distraction-free interface. Toggle between visual and source modes. Vim keybindings if you want them.</p>
+            <ul class="feature-list">
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                Rich TipTap editor with Cmd+E toggle
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                Optional Vim mode for modal editing
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                Tables, code blocks, images, frontmatter
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                Multi-tab workspace with split pane view
+              </li>
+            </ul>
+          </div>
+          <div class="feature-visual">
+            <div class="mockup">
+              <div class="mockup-titlebar">
+                <span class="mockup-dot red"></span>
+                <span class="mockup-dot yellow"></span>
+                <span class="mockup-dot green"></span>
+                <span style="font-family: -apple-system, sans-serif; font-size: 0.72rem; color: var(--mockup-muted); margin-left: 8px;">product-spec.md</span>
+              </div>
+              <div class="mockup-editor-text">
+                <div class="heading">Product Requirements</div>
+                <p style="margin-bottom: 12px;">The new platform focuses on three core principles:</p>
+                <p style="margin-bottom: 8px;"><strong>1. Speed over features.</strong> <span class="muted">Ship the smallest version that solves the problem. Iterate from real usage, not hypothetical requirements.</span></p>
+                <p style="margin-bottom: 8px;"><strong>2. Local-first data.</strong> <span class="muted">All documents live on disk as plain markdown. Sync is opt-in via git, not required.</span></p>
+                <p><strong>3. Human-in-the-loop AI.</strong> <span class="muted">Every AI suggestion is a proposal. Nothing changes without explicit approval.</span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. GitHub Review -->
+      <div class="feature-section fade-in">
+        <div class="feature-grid">
+          <div class="feature-text">
+            <div class="feature-label">Collaboration</div>
+            <h2>Documents go through review, just like code</h2>
+            <p>Submit any document for review on GitHub. Your team comments on the PR. Pull those comments back into Komma, let Claude address them, and push updates -- all from the editor.</p>
+            <ul class="feature-list">
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 22h4a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v3"/><polyline points="14 2 14 8 20 8"/><path d="m 3 18 3-3-3-3"/><path d="M7 15h6"/></svg>
+                Submit for Review creates a branch and PR
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                Pull review comments from GitHub into the Edits tab
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Claude can address review feedback directly
+              </li>
+              <li>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                Push updates back to the PR in one click
+              </li>
+            </ul>
+          </div>
+          <div class="feature-visual">
+            <div class="mockup">
+              <div class="mockup-titlebar">
+                <span class="mockup-dot red"></span>
+                <span class="mockup-dot yellow"></span>
+                <span class="mockup-dot green"></span>
+                <span style="font-family: -apple-system, sans-serif; font-size: 0.72rem; color: var(--mockup-muted); margin-left: 8px;">Edits &middot; Review</span>
+              </div>
+              <div class="mockup-body" style="padding: 16px 20px;">
+                <div style="font-family: -apple-system, sans-serif;">
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 16px;">
+                    <span style="font-size: 0.75rem; font-weight: 600; color: #fdb022; background: rgba(253, 176, 34, 0.12); padding: 2px 8px; border-radius: 4px;">PR #14</span>
+                    <span style="font-size: 0.8rem; color: var(--mockup-muted);">3 review comments</span>
+                  </div>
+                  <div style="border: 1px solid var(--mockup-border); border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                      <span style="width: 20px; height: 20px; border-radius: 50%; background: #334; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--mockup-muted);">JL</span>
+                      <span style="font-size: 0.78rem; font-weight: 500; color: var(--mockup-fg);">@jlin</span>
+                      <span style="font-size: 0.7rem; color: var(--mockup-muted);">&middot; 2h ago</span>
+                    </div>
+                    <div style="font-size: 0.82rem; color: var(--mockup-fg);">Can we add specific latency targets to the performance section?</div>
+                  </div>
+                  <div style="border: 1px solid var(--mockup-border); border-radius: 8px; padding: 12px;">
+                    <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                      <span style="width: 20px; height: 20px; border-radius: 50%; background: #334; display: flex; align-items: center; justify-content: center; font-size: 0.6rem; color: var(--mockup-muted);">SM</span>
+                      <span style="font-size: 0.78rem; font-weight: 500; color: var(--mockup-fg);">@smickley</span>
+                      <span style="font-size: 0.7rem; color: var(--mockup-muted);">&middot; 1h ago</span>
+                    </div>
+                    <div style="font-size: 0.82rem; color: var(--mockup-fg);">The auth section should reference the new SSO rollout plan</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="container">
+      <h2>Free and open source</h2>
+      <p>Komma is a side project, built in public. It uses your existing Claude subscription via the CLI -- no API key needed.</p>
+      <div class="cta-group">
+        <a href="https://github.com/smkly/komma/releases/latest" class="btn-primary">
+          Download for macOS
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </a>
+        <a href="https://github.com/smkly/komma" class="btn-secondary">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-left">Built by Sheldon</div>
+      <div class="footer-links">
+        <a href="https://github.com/smkly/komma">GitHub</a>
+        <a href="https://github.com/smkly/komma/releases">Releases</a>
+        <a href="https://github.com/smkly/komma/blob/main/LICENSE">License</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Theme toggle
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+    }
+
+    // Respect system preference on load
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+      } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+
+    // Scroll-triggered fade-in
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, { threshold: 0.15 });
+
+    document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+  </script>
+</body>
+</html>
