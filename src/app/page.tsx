@@ -179,6 +179,21 @@ export default function Home() {
   const [currentSearchMatch, setCurrentSearchMatch] = useState(0);
   const searchMarksRef = useRef<HTMLElement[]>([]);
 
+  // Vault search state (Cmd+Shift+F)
+  const [showVaultSearch, setShowVaultSearch] = useState(false);
+  const [vaultSearchQuery, setVaultSearchQuery] = useState('');
+  const [vaultSearchResults, setVaultSearchResults] = useState<Array<{ relativePath: string; line: number; text: string }>>([]);
+  const [vaultSearchLoading, setVaultSearchLoading] = useState(false);
+
+  // Vault files for wiki link autocomplete in editor
+  const [vaultFileIndex, setVaultFileIndex] = useState<Array<{ relativePath: string; firstLine: string }>>([]);
+
+  // Backlinks state
+  const [backlinks, setBacklinks] = useState<Array<{ relativePath: string; line: number; text: string }>>([]);
+
+  // Tags state
+  const [vaultTags, setVaultTags] = useState<Array<{ tag: string; count: number; files: string[] }>>([]);
+
   const editorBlockRef = useRef(0); // tracks cursor block inside RichEditor
 
   // Get navigable block elements from the article
@@ -450,6 +465,51 @@ export default function Home() {
     });
     searchMarksRef.current = [];
   }, []);
+
+  // Vault search execution (debounced)
+  useEffect(() => {
+    if (!showVaultSearch || !vaultSearchQuery || vaultSearchQuery.length < 2) {
+      setVaultSearchResults([]);
+      return;
+    }
+    const api = window.electronAPI;
+    if (!api || !doc.filePath) return;
+    setVaultSearchLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const results = await api.vault.search(doc.filePath, vaultSearchQuery);
+        setVaultSearchResults(results);
+      } catch { setVaultSearchResults([]); }
+      setVaultSearchLoading(false);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [showVaultSearch, vaultSearchQuery, doc.filePath]);
+
+  // Load backlinks when file changes
+  useEffect(() => {
+    if (!doc.filePath) { setBacklinks([]); return; }
+    const api = window.electronAPI;
+    if (!api) return;
+    api.vault.backlinks(doc.filePath, doc.filePath).then(setBacklinks).catch(() => setBacklinks([]));
+  }, [doc.filePath, doc.markdown]);
+
+  // Load vault tags
+  useEffect(() => {
+    if (!doc.filePath) return;
+    const api = window.electronAPI;
+    if (!api) return;
+    api.vault.tags(doc.filePath).then(setVaultTags).catch(() => setVaultTags([]));
+  }, [doc.filePath]);
+
+  // Load vault file index for wiki link autocomplete
+  useEffect(() => {
+    if (!doc.filePath) return;
+    const api = window.electronAPI;
+    if (!api) return;
+    api.vault.getIndex(doc.filePath).then(result => {
+      if (result) setVaultFileIndex(result.files);
+    }).catch(() => setVaultFileIndex([]));
+  }, [doc.filePath]);
 
   // Wrap loadDocument to also update comments, changelogs, and recent files.
   // loadGenRef guards against stale responses from a previous doc's in-flight fetch.
@@ -864,6 +924,13 @@ export default function Home() {
       if (e.metaKey && e.key === 'n') {
         e.preventDefault();
         setShowNewDocModal(true);
+      }
+
+      // Cmd+Shift+F: vault-wide search
+      if (e.metaKey && e.shiftKey && e.key === 'f') {
+        e.preventDefault();
+        setShowVaultSearch(true);
+        return;
       }
 
       // Cmd+F: search / find and replace (not for HTML files)
@@ -1560,15 +1627,31 @@ export default function Home() {
     }
   }, [handleSelectFile]);
 
-  // Navigate to a related document by name (resolves to sibling .md file)
+  // Navigate to a wiki-linked document. Resolves as:
+  // 1. Exact path from vault root (with or without .md)
+  // 2. Sibling file in same directory
   const navigateToDocument = useCallback((docName: string) => {
     const dir = doc.filePath.substring(0, doc.filePath.lastIndexOf('/'));
-    handleSelectFile(`${dir}/${docName}.md`);
-  }, [doc.filePath, handleSelectFile]);
+    // If it already has an extension, use as-is
+    const target = docName.endsWith('.md') ? docName : docName + '.md';
+    const api = window.electronAPI;
+    if (api) {
+      api.vault.resolveRoot(doc.filePath).then(vr => {
+        // Try vault-root-relative first, then sibling-relative
+        const resolved = vr ? `${vr}/${target}` : `${dir}/${target}`;
+        handleSelectFileRef.current(resolved);
+      });
+    } else {
+      handleSelectFileRef.current(`${dir}/${target}`);
+    }
+  }, [doc.filePath]);
 
   // Pre-process markdown to convert [[wiki-links]] to clickable spans
+  // Supports [[target|display text]] alias syntax
   const processWikiLinks = useCallback((md: string): string => {
-    return md.replace(/\[\[([^\]]+)\]\]/g, '<a class="wiki-link" data-wiki="$1" href="#">$1</a>');
+    return md
+      .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '<a class="wiki-link" data-wiki="$1" href="#">$2</a>')
+      .replace(/\[\[([^\]]+)\]\]/g, '<a class="wiki-link" data-wiki="$1" href="#">$1</a>');
   }, []);
 
   // Pre-process ==highlighted text== into <mark> tags before rendering.
@@ -1624,7 +1707,14 @@ export default function Home() {
         a: ({ href, children, ...props }) => {
           const handleClick = (e: React.MouseEvent) => {
             e.preventDefault();
-            if (!href) return;
+            // Wiki links: data-wiki attribute set by processWikiLinks
+            const wikiTarget = (e.currentTarget as HTMLElement).getAttribute('data-wiki');
+            if (wikiTarget) {
+              e.stopPropagation(); // prevent article-level handler from also firing
+              navigateToDocument(wikiTarget);
+              return;
+            }
+            if (!href || href === '#' || href.startsWith('#')) return;
             if (href.startsWith('http://') || href.startsWith('https://')) {
               window.electronAPI?.google.openUrl(href) ?? window.open(href);
               return;
@@ -2131,6 +2221,8 @@ export default function Home() {
                     saveDocument();
                   }}
                   onEditorReady={(editor) => { editorRef.current = editor; }}
+                  vaultFiles={vaultFileIndex}
+                  onNavigate={navigateToDocument}
                 />
               </div>
               <div style={{ display: doc.isEditMode ? 'none' : 'block' }}>
@@ -2288,12 +2380,73 @@ export default function Home() {
                 Table of contents is not available for HTML files.
               </div>
             ) : (
-              <TableOfContentsTab
-                markdown={doc.markdown}
-                articleRef={articleRef}
-                isEditMode={doc.isEditMode}
-                editorRef={editorRef}
-              />
+              <>
+                <TableOfContentsTab
+                  markdown={doc.markdown}
+                  articleRef={articleRef}
+                  isEditMode={doc.isEditMode}
+                  editorRef={editorRef}
+                />
+
+                {/* Backlinks section */}
+                {backlinks.length > 0 && (
+                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-ink-faded)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
+                      Backlinks ({backlinks.length})
+                    </div>
+                    {backlinks.map((bl, i) => (
+                      <div
+                        key={`bl-${i}`}
+                        onClick={() => {
+                          const api = window.electronAPI;
+                          if (api) {
+                            api.vault.resolveRoot(doc.filePath).then(vr => {
+                              if (vr) handleSelectFile(`${vr}/${bl.relativePath}`);
+                            });
+                          }
+                        }}
+                        style={{ padding: '4px 8px', cursor: 'pointer', borderRadius: 6, marginBottom: 2, transition: 'background 0.1s' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-paper-dark)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <div style={{ fontSize: 13, color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>{bl.relativePath}</div>
+                        <div style={{ fontSize: 11, color: 'var(--color-ink-faded)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bl.text}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Tags section */}
+                {vaultTags.length > 0 && (
+                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-ink-faded)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
+                      Tags
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {vaultTags.slice(0, 30).map((t) => (
+                        <span
+                          key={t.tag}
+                          onClick={() => { setShowVaultSearch(true); setVaultSearchQuery(`#${t.tag}`); }}
+                          style={{
+                            fontSize: 12,
+                            padding: '2px 8px',
+                            borderRadius: 12,
+                            background: 'var(--color-accent-subtle, rgba(110,87,255,0.08))',
+                            color: 'var(--color-accent)',
+                            cursor: 'pointer',
+                            fontFamily: 'var(--font-mono)',
+                            transition: 'background 0.1s',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-accent-light, rgba(110,87,255,0.15))')}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-accent-subtle, rgba(110,87,255,0.08))')}
+                        >
+                          #{t.tag} <span style={{ opacity: 0.6 }}>{t.count}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )
           ) : activeTab === 'edits' ? (
             <EditsTab
@@ -2872,6 +3025,65 @@ export default function Home() {
           </span>
         </div>
       </div>
+
+      {/* Vault-wide search modal (Cmd+Shift+F) */}
+      {showVaultSearch && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 9998, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: '15vh' }}
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowVaultSearch(false); setVaultSearchQuery(''); setVaultSearchResults([]); } }}
+        >
+          <div style={{ width: '100%', maxWidth: 600, background: 'var(--color-surface)', borderRadius: 12, border: '1px solid var(--color-border)', boxShadow: '0 8px 40px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-ink-faded)" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Search across vault..."
+                value={vaultSearchQuery}
+                onChange={(e) => setVaultSearchQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') { setShowVaultSearch(false); setVaultSearchQuery(''); setVaultSearchResults([]); } }}
+                style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--color-ink)', fontSize: 15, fontFamily: 'var(--font-mono)' }}
+              />
+              {vaultSearchLoading && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" className="animate-spin"><circle cx="12" cy="12" r="10" opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg>
+              )}
+              <span style={{ fontSize: 11, color: 'var(--color-ink-faded)', fontFamily: 'var(--font-mono)' }}>{vaultSearchResults.length > 0 ? `${vaultSearchResults.length} results` : ''}</span>
+            </div>
+            <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+              {vaultSearchResults.length === 0 && vaultSearchQuery.length >= 2 && !vaultSearchLoading && (
+                <div style={{ padding: '24px 16px', textAlign: 'center', color: 'var(--color-ink-faded)', fontSize: 13 }}>No results found</div>
+              )}
+              {vaultSearchResults.map((result, i) => (
+                <div
+                  key={`${result.relativePath}:${result.line}:${i}`}
+                  onClick={() => {
+                    const api = window.electronAPI;
+                    if (api) {
+                      api.vault.resolveRoot(doc.filePath).then(vaultRoot => {
+                        if (vaultRoot) handleSelectFile(`${vaultRoot}/${result.relativePath}`);
+                      });
+                    }
+                    setShowVaultSearch(false);
+                    setVaultSearchQuery('');
+                    setVaultSearchResults([]);
+                  }}
+                  style={{ padding: '8px 16px', cursor: 'pointer', borderBottom: '1px solid var(--color-border)', transition: 'background 0.1s' }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-paper-dark)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--color-ink)', fontFamily: 'var(--font-mono)', marginBottom: 2 }}>
+                    {result.relativePath}
+                    <span style={{ color: 'var(--color-ink-faded)', fontWeight: 400, marginLeft: 6 }}>:{result.line}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--color-ink-faded)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {result.text}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {isDragOver && (
         <div

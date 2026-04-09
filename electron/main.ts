@@ -1657,6 +1657,180 @@ function registerIpcHandlers() {
     return scanVaultFiles(vaultRoot).map(f => f.relativePath);
   });
 
+  // -- Vault search: full-text search across all .md files --
+  ipcMain.handle('vault:search', async (_event, fromPath: string, query: string) => {
+    const vaultRootRaw = resolveVaultRoot(fromPath);
+    if (!vaultRootRaw || !query) return [];
+    const vaultRoot: string = vaultRootRaw;
+    const results: Array<{ relativePath: string; line: number; text: string }> = [];
+    const lowerQuery = query.toLowerCase();
+    const maxResults = 100;
+
+    function searchWalk(dir: string) {
+      if (results.length >= maxResults) return;
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (results.length >= maxResults) return;
+          if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            searchWalk(fullPath);
+          } else if (entry.name.endsWith('.md')) {
+            try {
+              const content = fs.readFileSync(fullPath, 'utf-8');
+              const lines = content.split('\n');
+              for (let i = 0; i < lines.length; i++) {
+                if (lines[i].toLowerCase().includes(lowerQuery)) {
+                  results.push({
+                    relativePath: path.relative(vaultRoot, fullPath),
+                    line: i + 1,
+                    text: lines[i].trim(),
+                  });
+                  if (results.length >= maxResults) return;
+                }
+              }
+            } catch { /* skip unreadable */ }
+          }
+        }
+      } catch { /* skip unreadable dirs */ }
+    }
+
+    searchWalk(vaultRoot);
+    return results;
+  });
+
+  // -- Vault backlinks: find all files that link to a given file --
+  ipcMain.handle('vault:backlinks', async (_event, fromPath: string, targetFile: string) => {
+    const vaultRootRaw = resolveVaultRoot(fromPath);
+    if (!vaultRootRaw) return [];
+    const vaultRoot: string = vaultRootRaw;
+    const results: Array<{ relativePath: string; line: number; text: string }> = [];
+    // Normalize target: strip extension and path prefix for matching
+    const targetName = path.basename(targetFile, path.extname(targetFile));
+    const targetRelative = path.relative(vaultRoot, targetFile);
+    const targetRelNoExt = targetRelative.replace(/\.md$/, '');
+
+    function backlinkWalk(dir: string) {
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            backlinkWalk(fullPath);
+          } else if (entry.name.endsWith('.md') && fullPath !== targetFile) {
+            try {
+              const content = fs.readFileSync(fullPath, 'utf-8');
+              const lines = content.split('\n');
+              for (let i = 0; i < lines.length; i++) {
+                // Match [[targetName]] or [[path/to/target]] (with or without .md)
+                const wikiLinkRegex = /\[\[([^\]]+)\]\]/g;
+                let match;
+                while ((match = wikiLinkRegex.exec(lines[i])) !== null) {
+                  const linkTarget = match[1].split('|')[0].trim(); // handle [[target|display]]
+                  if (
+                    linkTarget === targetName ||
+                    linkTarget === targetRelative ||
+                    linkTarget === targetRelNoExt ||
+                    linkTarget + '.md' === targetRelative
+                  ) {
+                    results.push({
+                      relativePath: path.relative(vaultRoot, fullPath),
+                      line: i + 1,
+                      text: lines[i].trim(),
+                    });
+                  }
+                }
+              }
+            } catch { /* skip unreadable */ }
+          }
+        }
+      } catch { /* skip unreadable dirs */ }
+    }
+
+    backlinkWalk(vaultRoot);
+    return results;
+  });
+
+  // -- Vault tags: collect all tags from vault files --
+  ipcMain.handle('vault:tags', async (_event, fromPath: string) => {
+    const vaultRootRaw = resolveVaultRoot(fromPath);
+    if (!vaultRootRaw) return [];
+    const vaultRoot: string = vaultRootRaw;
+    const tagMap = new Map<string, string[]>(); // tag -> [relativePaths]
+
+    function tagWalk(dir: string) {
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            tagWalk(fullPath);
+          } else if (entry.name.endsWith('.md')) {
+            try {
+              const content = fs.readFileSync(fullPath, 'utf-8');
+              const relPath = path.relative(vaultRoot, fullPath);
+              const fileTags = new Set<string>();
+
+              // Extract frontmatter tags: tags: [foo, bar] or tags:\n  - foo\n  - bar
+              const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+              if (fmMatch) {
+                const fmContent = fmMatch[1];
+                // Inline: tags: [foo, bar] or tags: foo, bar
+                const inlineMatch = fmContent.match(/^tags:\s*\[([^\]]*)\]/m);
+                if (inlineMatch) {
+                  inlineMatch[1].split(',').forEach(t => {
+                    const tag = t.trim().replace(/^["']|["']$/g, '');
+                    if (tag) fileTags.add(tag);
+                  });
+                } else {
+                  // List style: tags:\n  - foo
+                  const listMatch = fmContent.match(/^tags:\s*\n((?:\s+-\s+.+\n?)*)/m);
+                  if (listMatch) {
+                    listMatch[1].replace(/\s+-\s+(.+)/g, (_m, tag) => {
+                      fileTags.add(tag.trim().replace(/^["']|["']$/g, ''));
+                      return '';
+                    });
+                  }
+                }
+              }
+
+              // Extract inline #tags (skip code blocks and frontmatter)
+              let inCodeBlock = false;
+              let inFrontmatter = false;
+              const lines = content.split('\n');
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (i === 0 && line.trim() === '---') { inFrontmatter = true; continue; }
+                if (inFrontmatter) { if (line.trim() === '---') inFrontmatter = false; continue; }
+                if (/^(`{3,}|~{3,})/.test(line)) { inCodeBlock = !inCodeBlock; continue; }
+                if (inCodeBlock) continue;
+                // Match #tag but not ## headings, not inside URLs, not hex colors
+                const tagRegex = /(?:^|[\s,;(])#([a-zA-Z][a-zA-Z0-9_/-]*)/g;
+                let tagMatch;
+                while ((tagMatch = tagRegex.exec(line)) !== null) {
+                  fileTags.add(tagMatch[1]);
+                }
+              }
+
+              for (const tag of fileTags) {
+                if (!tagMap.has(tag)) tagMap.set(tag, []);
+                tagMap.get(tag)!.push(relPath);
+              }
+            } catch { /* skip unreadable */ }
+          }
+        }
+      } catch { /* skip unreadable dirs */ }
+    }
+
+    tagWalk(vaultRoot);
+    return Array.from(tagMap.entries())
+      .map(([tag, files]) => ({ tag, count: files.length, files }))
+      .sort((a, b) => b.count - a.count);
+  });
+
   ipcMain.handle('google:check-existing', async (_event, docPath: string) => {
     const existing = getExistingDoc(docPath);
     if (!existing) return null;

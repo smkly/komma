@@ -105,6 +105,20 @@ export function useDocument() {
         return '==' + content + '==';
       }
     });
+    // Convert wiki-link anchors back to [[link]] syntax
+    service.addRule('wikiLink', {
+      filter: function(node) {
+        return node.nodeName === 'A' && node.getAttribute('data-wiki') !== null;
+      },
+      replacement: function(_content, node) {
+        const target = (node as HTMLElement).getAttribute('data-wiki') || '';
+        const display = (node as HTMLElement).textContent || '';
+        if (display && display !== target) {
+          return `[[${target}|${display}]]`;
+        }
+        return `[[${target}]]`;
+      }
+    });
     return service;
   });
 
@@ -263,8 +277,11 @@ export function useDocument() {
         bodyMd = bodyMd.slice(rawFrontmatterRef.current.length);
       }
       setEditedMarkdown(bodyMd);
+      // Convert [[wiki links]] to HTML anchors before marked() processes them
+      let preMd = bodyMd.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '<a class="wiki-link" data-wiki="$1" href="#">$2</a>');
+      preMd = preMd.replace(/\[\[([^\]]+)\]\]/g, '<a class="wiki-link" data-wiki="$1" href="#">$1</a>');
       // Resolve relative image paths through the API so TipTap can load them
-      let html = marked(bodyMd) as string;
+      let html = marked(preMd) as string;
       const docDir = filePath.substring(0, filePath.lastIndexOf('/'));
       html = html.replace(/<img\s+([^>]*?)src="([^"]+)"/gi, (_match, before, src) => {
         if (src.startsWith('http') || src.startsWith('data:') || src.startsWith('/api/')) return _match;

@@ -42,6 +42,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listFiles(fromPath: string): Promise<string[]> {
       return ipcRenderer.invoke('vault:list-files', fromPath);
     },
+    search(fromPath: string, query: string): Promise<Array<{ relativePath: string; line: number; text: string }>> {
+      return ipcRenderer.invoke('vault:search', fromPath, query);
+    },
+    backlinks(fromPath: string, targetFile: string): Promise<Array<{ relativePath: string; line: number; text: string }>> {
+      return ipcRenderer.invoke('vault:backlinks', fromPath, targetFile);
+    },
+    tags(fromPath: string): Promise<Array<{ tag: string; count: number; files: string[] }>> {
+      return ipcRenderer.invoke('vault:tags', fromPath);
+    },
   },
   google: {
     checkExisting(docPath: string): Promise<{ url: string; title: string; updatedAt: string } | null> {

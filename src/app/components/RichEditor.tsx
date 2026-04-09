@@ -13,6 +13,11 @@ import Image from '@tiptap/extension-image';
 import ImageNodeView from './ImageNodeView';
 import { useEffect, useRef, useCallback, useState } from 'react';
 
+interface VaultFile {
+  relativePath: string;
+  firstLine: string;
+}
+
 interface RichEditorProps {
   content: string; // HTML content
   onChange?: (html: string) => void;
@@ -22,6 +27,8 @@ interface RichEditorProps {
   onCursorBlockChange?: (blockIndex: number) => void;
   onExit?: () => void; // called on jk escape sequence
   onEditorReady?: (editor: any) => void; // exposes TipTap editor to parent
+  vaultFiles?: VaultFile[]; // for [[ wiki link autocomplete
+  onNavigate?: (docName: string) => void; // navigate to wiki-linked doc
 }
 
 const BubbleButton = ({
@@ -58,7 +65,7 @@ const BubbleButton = ({
   );
 };
 
-export default function RichEditor({ content, onChange, initialBlockIndex, initialWordIndex, isVisible, onCursorBlockChange, onExit, onEditorReady }: RichEditorProps) {
+export default function RichEditor({ content, onChange, initialBlockIndex, initialWordIndex, isVisible, onCursorBlockChange, onExit, onEditorReady, vaultFiles, onNavigate }: RichEditorProps) {
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -74,6 +81,21 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
   const tableToolbarRef = useRef<HTMLDivElement>(null);
   const onCursorBlockChangeRef = useRef(onCursorBlockChange);
   onCursorBlockChangeRef.current = onCursorBlockChange;
+
+  // Wiki link [[ autocomplete state
+  const [wikiLinkActive, setWikiLinkActive] = useState(false);
+  const [wikiLinkQuery, setWikiLinkQuery] = useState('');
+  const [wikiLinkPos, setWikiLinkPos] = useState<{ x: number; y: number } | null>(null);
+  const [wikiLinkIndex, setWikiLinkIndex] = useState(0);
+  const wikiLinkStartRef = useRef<number>(-1); // ProseMirror position where [[ started
+  const wikiLinkDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Filter vault files by query
+  const wikiLinkItems = (vaultFiles || []).filter(f => {
+    if (!wikiLinkQuery) return true;
+    const q = wikiLinkQuery.toLowerCase();
+    return f.relativePath.toLowerCase().includes(q) || f.firstLine.toLowerCase().includes(q);
+  }).slice(0, 12);
 
   // Flush onChange immediately — no debounce, so save never reads stale HTML
   const flushOnChange = useCallback((html: string) => {
@@ -91,7 +113,21 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
       TableCell,
       Underline,
       Highlight,
-      Link.configure({ openOnClick: false }),
+      Link.extend({
+        addAttributes() {
+          return {
+            ...this.parent?.(),
+            'data-wiki': {
+              default: null,
+              parseHTML: (element: HTMLElement) => element.getAttribute('data-wiki'),
+              renderHTML: (attributes: Record<string, any>) => {
+                if (!attributes['data-wiki']) return {};
+                return { 'data-wiki': attributes['data-wiki'], class: 'wiki-link' };
+              },
+            },
+          };
+        },
+      }).configure({ openOnClick: false }),
       Image.extend({
         addAttributes() {
           return {
@@ -109,6 +145,33 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
     immediatelyRender: false,
     onUpdate: ({ editor }) => {
       flushOnChange(editor.getHTML());
+
+      // Detect [[ wiki link trigger (wrapped in try/catch to never break the editor)
+      try {
+        if (!vaultFiles?.length) return;
+        const { from } = editor.state.selection;
+        const textBefore = editor.state.doc.textBetween(Math.max(0, from - 100), from, '\n');
+        const openBracket = textBefore.lastIndexOf('[[');
+        const closeBracket = textBefore.lastIndexOf(']]');
+
+        if (openBracket >= 0 && (closeBracket < 0 || closeBracket < openBracket)) {
+          const query = textBefore.slice(openBracket + 2);
+          if (!query.includes('\n')) {
+            const startPos = from - textBefore.length + openBracket;
+            wikiLinkStartRef.current = startPos;
+            setWikiLinkQuery(query);
+            setWikiLinkIndex(0);
+            if (!wikiLinkActive) setWikiLinkActive(true);
+            try {
+              const coords = editor.view.coordsAtPos(from);
+              setWikiLinkPos({ x: coords.left, y: coords.bottom + 4 });
+            } catch { /* ignore */ }
+          }
+        } else if (wikiLinkActive) {
+          setWikiLinkActive(false);
+          setWikiLinkQuery('');
+        }
+      } catch { /* never break the editor */ }
     },
     onSelectionUpdate: ({ editor }) => {
       const { from, to } = editor.state.selection;
@@ -180,6 +243,22 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
       attributes: {
         class: 'prose prose-editorial max-w-none min-h-[calc(100vh-14rem)] focus:outline-none',
       },
+      handleClick: (view, pos, event) => {
+        // Intercept clicks on wiki links in edit mode
+        const target = event.target as HTMLElement;
+        const wikiEl = target.closest?.('a.wiki-link, a[data-wiki]');
+        if (wikiEl) {
+          event.preventDefault();
+          const docName = wikiEl.getAttribute('data-wiki');
+          if (docName && onNavigate) {
+            // Save and exit edit mode first, then navigate
+            onExitRef.current?.();
+            setTimeout(() => onNavigate(docName), 100);
+          }
+          return true;
+        }
+        return false;
+      },
       handlePaste: (view, event) => {
         const items = event.clipboardData?.items;
         if (!items) return false;
@@ -224,6 +303,49 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
         return false;
       },
       handleKeyDown: (view, event) => {
+        // Wiki link autocomplete keyboard navigation
+        if (wikiLinkActive && wikiLinkItems.length > 0) {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            setWikiLinkIndex(prev => Math.min(prev + 1, wikiLinkItems.length - 1));
+            return true;
+          }
+          if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            setWikiLinkIndex(prev => Math.max(prev - 1, 0));
+            return true;
+          }
+          if (event.key === 'Enter' || event.key === 'Tab') {
+            event.preventDefault();
+            const selected = wikiLinkItems[wikiLinkIndex];
+            if (selected && editor) {
+              // Replace from [[ to cursor with the wiki link HTML
+              const { from } = editor.state.selection;
+              const displayName = selected.relativePath.replace(/\.md$/, '');
+              const linkHtml = `<a class="wiki-link" data-wiki="${displayName}" href="#">${displayName}</a>`;
+              // Delete from [[ position to cursor, then insert
+              editor.chain()
+                .focus()
+                .deleteRange({ from: wikiLinkStartRef.current, to: from })
+                .insertContent(linkHtml)
+                .run();
+              setWikiLinkActive(false);
+              setWikiLinkQuery('');
+            }
+            return true;
+          }
+        }
+        if (event.key === 'Escape') {
+          if (wikiLinkActive) {
+            setWikiLinkActive(false);
+            setWikiLinkQuery('');
+            return true;
+          }
+          // Exit edit mode (save + close)
+          onExitRef.current?.();
+          return true;
+        }
+
         // Cmd+Shift+H toggles highlight
         if (event.key === 'h' && event.metaKey && event.shiftKey) {
           event.preventDefault();
@@ -676,6 +798,66 @@ export default function RichEditor({ content, onChange, initialBlockIndex, initi
               </svg>
             </BubbleButton>
           </div>
+        </div>
+      )}
+
+      {/* Wiki link [[ autocomplete dropdown */}
+      {editor && wikiLinkActive && wikiLinkPos && wikiLinkItems.length > 0 && (
+        <div
+          ref={wikiLinkDropdownRef}
+          className="fixed z-30"
+          style={{
+            left: wikiLinkPos.x,
+            top: wikiLinkPos.y,
+            minWidth: 280,
+            maxWidth: 420,
+            maxHeight: 300,
+            overflowY: 'auto',
+            background: 'var(--color-overlay, #1a1a2e)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 8,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+            padding: '4px 0',
+          }}
+        >
+          {wikiLinkItems.map((file, i) => {
+            const displayName = file.relativePath.replace(/\.md$/, '');
+            return (
+              <div
+                key={file.relativePath}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  if (editor) {
+                    const { from } = editor.state.selection;
+                    const linkHtml = `<a class="wiki-link" data-wiki="${displayName}" href="#">${displayName}</a>`;
+                    editor.chain()
+                      .focus()
+                      .deleteRange({ from: wikiLinkStartRef.current, to: from })
+                      .insertContent(linkHtml)
+                      .run();
+                    setWikiLinkActive(false);
+                    setWikiLinkQuery('');
+                  }
+                }}
+                style={{
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  background: i === wikiLinkIndex ? 'rgba(110,87,255,0.15)' : 'transparent',
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={() => setWikiLinkIndex(i)}
+              >
+                <div style={{ fontSize: 13, color: i === wikiLinkIndex ? 'var(--color-accent, #6E57FF)' : 'rgba(255,255,255,0.85)', fontFamily: 'var(--font-mono, monospace)' }}>
+                  {displayName}
+                </div>
+                {file.firstLine && (
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
+                    {file.firstLine}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

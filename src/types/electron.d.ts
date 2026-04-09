@@ -40,6 +40,9 @@ declare global {
           files: Array<{ relativePath: string; firstLine: string }>;
         } | null>;
         listFiles(fromPath: string): Promise<string[]>;
+        search(fromPath: string, query: string): Promise<Array<{ relativePath: string; line: number; text: string }>>;
+        backlinks(fromPath: string, targetFile: string): Promise<Array<{ relativePath: string; line: number; text: string }>>;
+        tags(fromPath: string): Promise<Array<{ tag: string; count: number; files: string[] }>>;
       };
       google: {
         checkExisting(docPath: string): Promise<{ url: string; title: string; updatedAt: string } | null>;
