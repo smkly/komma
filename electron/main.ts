@@ -1831,6 +1831,67 @@ function registerIpcHandlers() {
       .sort((a, b) => b.count - a.count);
   });
 
+  // -- Vault graph: nodes + edges for force-directed graph view --
+  ipcMain.handle('vault:graph', async (_event, fromPath: string) => {
+    const vaultRootRaw = resolveVaultRoot(fromPath);
+    if (!vaultRootRaw) return { nodes: [], edges: [] };
+    const vaultRoot: string = vaultRootRaw;
+
+    const nodes: Array<{ id: string; title: string; linkCount: number }> = [];
+    const edges: Array<{ source: string; target: string }> = [];
+    const fileSet = new Set<string>(); // track which files exist
+
+    // First pass: collect all files
+    const files = scanVaultFiles(vaultRoot);
+    for (const f of files) {
+      const id = f.relativePath.replace(/\.md$/, '');
+      nodes.push({ id, title: f.firstLine || id.split('/').pop() || id, linkCount: 0 });
+      fileSet.add(id);
+    }
+
+    // Second pass: extract [[wiki links]] from each file to build edges
+    const edgeSet = new Set<string>(); // deduplicate edges
+    for (const f of files) {
+      const fullPath = path.join(vaultRoot, f.relativePath);
+      const sourceId = f.relativePath.replace(/\.md$/, '');
+      try {
+        const content = fs.readFileSync(fullPath, 'utf-8');
+        const wikiLinkRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
+        let match;
+        while ((match = wikiLinkRegex.exec(content)) !== null) {
+          let targetId = match[1].trim();
+          // Normalize: strip .md extension if present
+          targetId = targetId.replace(/\.md$/, '');
+          // Create edge (deduplicated, skip self-links)
+          if (targetId !== sourceId) {
+            const edgeKey = [sourceId, targetId].sort().join('::');
+            if (!edgeSet.has(edgeKey)) {
+              edgeSet.add(edgeKey);
+              edges.push({ source: sourceId, target: targetId });
+            }
+          }
+          // If target doesn't exist as a file, add it as an orphan node
+          if (!fileSet.has(targetId)) {
+            fileSet.add(targetId);
+            nodes.push({ id: targetId, title: targetId.split('/').pop() || targetId, linkCount: 0 });
+          }
+        }
+      } catch { /* skip unreadable */ }
+    }
+
+    // Count connections per node
+    const connectionCount = new Map<string, number>();
+    for (const edge of edges) {
+      connectionCount.set(edge.source, (connectionCount.get(edge.source) || 0) + 1);
+      connectionCount.set(edge.target, (connectionCount.get(edge.target) || 0) + 1);
+    }
+    for (const node of nodes) {
+      node.linkCount = connectionCount.get(node.id) || 0;
+    }
+
+    return { nodes, edges };
+  });
+
   ipcMain.handle('google:check-existing', async (_event, docPath: string) => {
     const existing = getExistingDoc(docPath);
     if (!existing) return null;

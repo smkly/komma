@@ -51,6 +51,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     tags(fromPath: string): Promise<Array<{ tag: string; count: number; files: string[] }>> {
       return ipcRenderer.invoke('vault:tags', fromPath);
     },
+    graph(fromPath: string): Promise<{ nodes: Array<{ id: string; title: string; linkCount: number }>; edges: Array<{ source: string; target: string }> }> {
+      return ipcRenderer.invoke('vault:graph', fromPath);
+    },
   },
   google: {
     checkExisting(docPath: string): Promise<{ url: string; title: string; updatedAt: string } | null> {

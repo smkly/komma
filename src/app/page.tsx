@@ -28,6 +28,7 @@ import CommentDrawer from './components/CommentDrawer';
 import FileBrowser from './components/FileBrowser';
 import NewDocumentModal from './components/NewDocumentModal';
 import QuickCaptureModal from './components/QuickCaptureModal';
+import GraphView from './components/GraphView';
 import DocumentInfo from './components/DocumentInfo';
 import SearchBar from './components/SearchBar';
 import InlineDiffView from './components/InlineDiffView';
@@ -66,7 +67,7 @@ export default function Home() {
   }, [doc.saveDocument]);
   const setIsEditMode = useCallback((mode: boolean) => { saveScrollFraction(); doc.setIsEditMode(mode); }, [doc.setIsEditMode, saveScrollFraction]);
 
-  const [activeTab, setActiveTab] = useState<'toc' | 'edits' | 'chat' | 'history'>('edits');
+  const [activeTab, setActiveTab] = useState<'toc' | 'edits' | 'chat' | 'history' | 'links'>('edits');
   const [showFileBrowser, setShowFileBrowser] = useState(false);
   const [showNewDocModal, setShowNewDocModal] = useState(false);
   const [showQuickCapture, setShowQuickCapture] = useState(false);
@@ -193,6 +194,10 @@ export default function Home() {
 
   // Tags state
   const [vaultTags, setVaultTags] = useState<Array<{ tag: string; count: number; files: string[] }>>([]);
+
+  // Graph view state
+  const [showGraph, setShowGraph] = useState(false);
+  const [graphData, setGraphData] = useState<{ nodes: Array<{ id: string; title: string; linkCount: number }>; edges: Array<{ source: string; target: string }> }>({ nodes: [], edges: [] });
 
   const editorBlockRef = useRef(0); // tracks cursor block inside RichEditor
 
@@ -926,6 +931,31 @@ export default function Home() {
         setShowNewDocModal(true);
       }
 
+      // Cmd+Shift+R: show related docs (open sidebar to Links tab)
+      if (e.metaKey && e.shiftKey && e.key === 'r') {
+        e.preventDefault();
+        setShowAgentTab(true);
+        setActiveTab('links');
+        return;
+      }
+
+      // Cmd+G: graph view
+      if (e.metaKey && e.key === 'g') {
+        e.preventDefault();
+        if (showGraph) {
+          setShowGraph(false);
+        } else {
+          const api = window.electronAPI;
+          if (api && doc.filePath) {
+            api.vault.graph(doc.filePath).then(data => {
+              setGraphData(data);
+              setShowGraph(true);
+            });
+          }
+        }
+        return;
+      }
+
       // Cmd+Shift+F: vault-wide search
       if (e.metaKey && e.shiftKey && e.key === 'f') {
         e.preventDefault();
@@ -1022,7 +1052,9 @@ export default function Home() {
 
       // Escape: close overlays, or exit edit mode, or delegate to vim
       if (e.key === 'Escape') {
-        if (showSearch) {
+        if (showGraph) {
+          return; // GraphView handles its own Escape (deselect first, then close)
+        } else if (showSearch) {
           closeSearch();
         } else if (showQuickCapture) {
           setShowQuickCapture(false);
@@ -2380,73 +2412,12 @@ export default function Home() {
                 Table of contents is not available for HTML files.
               </div>
             ) : (
-              <>
-                <TableOfContentsTab
-                  markdown={doc.markdown}
-                  articleRef={articleRef}
-                  isEditMode={doc.isEditMode}
-                  editorRef={editorRef}
-                />
-
-                {/* Backlinks section */}
-                {backlinks.length > 0 && (
-                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-ink-faded)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
-                      Backlinks ({backlinks.length})
-                    </div>
-                    {backlinks.map((bl, i) => (
-                      <div
-                        key={`bl-${i}`}
-                        onClick={() => {
-                          const api = window.electronAPI;
-                          if (api) {
-                            api.vault.resolveRoot(doc.filePath).then(vr => {
-                              if (vr) handleSelectFile(`${vr}/${bl.relativePath}`);
-                            });
-                          }
-                        }}
-                        style={{ padding: '4px 8px', cursor: 'pointer', borderRadius: 6, marginBottom: 2, transition: 'background 0.1s' }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-paper-dark)')}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <div style={{ fontSize: 13, color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>{bl.relativePath}</div>
-                        <div style={{ fontSize: 11, color: 'var(--color-ink-faded)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bl.text}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Tags section */}
-                {vaultTags.length > 0 && (
-                  <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-ink-faded)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
-                      Tags
-                    </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {vaultTags.slice(0, 30).map((t) => (
-                        <span
-                          key={t.tag}
-                          onClick={() => { setShowVaultSearch(true); setVaultSearchQuery(`#${t.tag}`); }}
-                          style={{
-                            fontSize: 12,
-                            padding: '2px 8px',
-                            borderRadius: 12,
-                            background: 'var(--color-accent-subtle, rgba(110,87,255,0.08))',
-                            color: 'var(--color-accent)',
-                            cursor: 'pointer',
-                            fontFamily: 'var(--font-mono)',
-                            transition: 'background 0.1s',
-                          }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-accent-light, rgba(110,87,255,0.15))')}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-accent-subtle, rgba(110,87,255,0.08))')}
-                        >
-                          #{t.tag} <span style={{ opacity: 0.6 }}>{t.count}</span>
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
+              <TableOfContentsTab
+                markdown={doc.markdown}
+                articleRef={articleRef}
+                isEditMode={doc.isEditMode}
+                editorRef={editorRef}
+              />
             )
           ) : activeTab === 'edits' ? (
             <EditsTab
@@ -2509,7 +2480,7 @@ export default function Home() {
               model={claude.model}
               setModel={claude.setModel}
             />
-          ) : (
+          ) : activeTab === 'history' ? (
             <HistoryTab
               snapshots={historySnapshots}
               isLoading={historyLoading}
@@ -2519,6 +2490,101 @@ export default function Home() {
               onBack={() => { setHistorySelectedSnapshot(null); setHistoryDiffChunks(null); }}
               isDiffLoading={!!historySelectedSnapshot && !historyDiffChunks}
             />
+          ) : (
+            /* Links tab */
+            <div>
+              {/* Outgoing links */}
+              {(() => {
+                const outgoing: Array<{ id: string; display: string }> = [];
+                const seen = new Set<string>();
+                const re = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+                let m;
+                while ((m = re.exec(doc.markdown)) !== null) {
+                  const id = m[1].trim();
+                  if (!seen.has(id)) { seen.add(id); outgoing.push({ id, display: m[2]?.trim() || id.split('/').pop() || id }); }
+                }
+                return outgoing.length > 0 ? (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-ink-faded)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
+                      Links to ({outgoing.length})
+                    </div>
+                    {outgoing.map(o => (
+                      <div
+                        key={o.id}
+                        onClick={() => navigateToDocument(o.id)}
+                        style={{ padding: '4px 8px', cursor: 'pointer', borderRadius: 6, marginBottom: 2, transition: 'background 0.1s' }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-paper-dark)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                      >
+                        <div style={{ fontSize: 13, color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>{o.display}</div>
+                        {o.id !== o.display && <div style={{ fontSize: 10, color: 'var(--color-ink-faded)', fontFamily: 'var(--font-mono)' }}>{o.id}</div>}
+                      </div>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Backlinks */}
+              {backlinks.length > 0 && (
+                <div style={{ marginBottom: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-ink-faded)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
+                    Linked from ({backlinks.length})
+                  </div>
+                  {backlinks.map((bl, i) => (
+                    <div
+                      key={`bl-${i}`}
+                      onClick={() => {
+                        const api = window.electronAPI;
+                        if (api) {
+                          api.vault.resolveRoot(doc.filePath).then(vr => {
+                            if (vr) handleSelectFileRef.current(`${vr}/${bl.relativePath}`);
+                          });
+                        }
+                      }}
+                      style={{ padding: '4px 8px', cursor: 'pointer', borderRadius: 6, marginBottom: 2, transition: 'background 0.1s' }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-paper-dark)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <div style={{ fontSize: 13, color: 'var(--color-accent)', fontFamily: 'var(--font-mono)' }}>{bl.relativePath.replace(/\.md$/, '')}</div>
+                      <div style={{ fontSize: 11, color: 'var(--color-ink-faded)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bl.text}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Tags */}
+              {vaultTags.length > 0 && (
+                <div style={{ paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-ink-faded)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
+                    Tags
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {vaultTags.slice(0, 30).map((t) => (
+                      <span
+                        key={t.tag}
+                        onClick={() => { setShowVaultSearch(true); setVaultSearchQuery(`#${t.tag}`); }}
+                        style={{
+                          fontSize: 12, padding: '2px 8px', borderRadius: 12,
+                          background: 'var(--color-accent-subtle, rgba(110,87,255,0.08))',
+                          color: 'var(--color-accent)', cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                          transition: 'background 0.1s',
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-accent-light, rgba(110,87,255,0.15))')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--color-accent-subtle, rgba(110,87,255,0.08))')}
+                      >
+                        #{t.tag} <span style={{ opacity: 0.6 }}>{t.count}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!doc.markdown && (
+                <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--color-ink-faded)', fontSize: 12 }}>
+                  Open a document to see links
+                </div>
+              )}
+            </div>
           )}
         </Sidebar>}
       </div>
@@ -3025,6 +3091,43 @@ export default function Home() {
           </span>
         </div>
       </div>
+
+      {/* Graph view (Cmd+G) */}
+      {showGraph && graphData.nodes.length > 0 && (
+        <GraphView
+          nodes={graphData.nodes}
+          edges={graphData.edges}
+          currentDocId={doc.filePath && vaultRoot ? doc.filePath.replace(vaultRoot + '/', '').replace(/\.md$/, '') : undefined}
+          onSelectNode={(id) => {
+            setShowGraph(false);
+            const vr = vaultRoot;
+            if (vr) {
+              // The ID might be a full relative path (campaigns/axiom/file) or just a filename (file)
+              // Try exact path first, then search vault files for a match
+              const exactPath = `${vr}/${id}.md`;
+              const api = window.electronAPI;
+              if (api) {
+                api.vault.getIndex(vr).then(index => {
+                  if (!index) return;
+                  // Look for exact match first
+                  const exact = index.files.find(f => f.relativePath === `${id}.md`);
+                  if (exact) {
+                    handleSelectFileRef.current(`${vr}/${exact.relativePath}`);
+                  } else {
+                    // Fuzzy: find a file whose name matches the id (handles orphan nodes from [[filename]] links)
+                    const basename = id.split('/').pop() || id;
+                    const fuzzy = index.files.find(f => f.relativePath.replace(/\.md$/, '').endsWith(basename));
+                    handleSelectFileRef.current(fuzzy ? `${vr}/${fuzzy.relativePath}` : exactPath);
+                  }
+                });
+              } else {
+                setTimeout(() => handleSelectFileRef.current(exactPath), 50);
+              }
+            }
+          }}
+          onClose={() => setShowGraph(false)}
+        />
+      )}
 
       {/* Vault-wide search modal (Cmd+Shift+F) */}
       {showVaultSearch && (

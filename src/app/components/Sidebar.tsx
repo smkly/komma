@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, ReactNode } from 'react';
 
 interface SidebarProps {
-  activeTab: 'toc' | 'edits' | 'chat' | 'history';
-  setActiveTab: (tab: 'toc' | 'edits' | 'chat' | 'history') => void;
+  activeTab: 'toc' | 'edits' | 'chat' | 'history' | 'links';
+  setActiveTab: (tab: 'toc' | 'edits' | 'chat' | 'history' | 'links') => void;
   commentsCount: number;
   isSending: boolean;
   isChatStreaming?: boolean;
@@ -34,6 +34,12 @@ const tabs = [
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <circle cx="12" cy="12" r="10" />
       <polyline points="12 6 12 12 16 14" />
+    </svg>
+  )},
+  { id: 'links' as const, label: 'Links', icon: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="5" r="2.5"/><circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="19" r="2.5"/>
+      <line x1="12" y1="7.5" x2="6" y2="16.5"/><line x1="12" y1="7.5" x2="18" y2="16.5"/>
     </svg>
   )},
 ];

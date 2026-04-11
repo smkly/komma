@@ -43,6 +43,7 @@ declare global {
         search(fromPath: string, query: string): Promise<Array<{ relativePath: string; line: number; text: string }>>;
         backlinks(fromPath: string, targetFile: string): Promise<Array<{ relativePath: string; line: number; text: string }>>;
         tags(fromPath: string): Promise<Array<{ tag: string; count: number; files: string[] }>>;
+        graph(fromPath: string): Promise<{ nodes: Array<{ id: string; title: string; linkCount: number }>; edges: Array<{ source: string; target: string }> }>;
       };
       google: {
         checkExisting(docPath: string): Promise<{ url: string; title: string; updatedAt: string } | null>;
