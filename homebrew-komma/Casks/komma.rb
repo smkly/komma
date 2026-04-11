@@ -1,6 +1,6 @@
 cask "komma" do
   version "0.3.0"
-  sha256 "0896b51109cb7f21defc8aec775ee2553297042249c9592501380c145898e15e"
+  sha256 "54e34c895db70bf6339eeec05ff0265db16539642403a765427019e553778329"
 
   url "https://github.com/0xSmick/komma/releases/download/v#{version}/Komma-#{version}-universal.dmg"
   name "Komma"
